@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -17,6 +18,9 @@ public class NetToCubeFolder : MonoBehaviour
     private List<Transform> createdFaces = new List<Transform>();
     private bool interactionEnabled = false;
 
+    // Cube folding finish ?? ??? trigger ?? event ??
+    public event Action CubeFoldCompleted;
+
     private struct FaceBasis
     {
         public Vector3 right;
@@ -31,7 +35,6 @@ public class NetToCubeFolder : MonoBehaviour
         }
     }
 
-    
     public void CreateAndFoldFromCanvas(
         HashSet<Vector2Int> cells,
         RectTransform drawingArea,
@@ -66,14 +69,12 @@ public class NetToCubeFolder : MonoBehaviour
         float cellWidth = drawingArea.rect.width / gridWidth;
         float cellHeight = drawingArea.rect.height / gridHeight;
 
-        
         float faceWorldSize = GetWorldSizeFromCanvasCell(cam, drawingArea, cellWidth, distanceFromCamera);
 
         Vector3 cubeCenterWorld = cam.transform.position + cam.transform.forward * distanceFromCamera;
 
         foreach (Vector2Int cell in cells)
         {
-            
             Vector3 startWorldPos = GetCanvasCellWorldPosition(
                 cam,
                 drawingArea,
@@ -96,7 +97,6 @@ public class NetToCubeFolder : MonoBehaviour
 
             FaceBasis basis = finalBases[cell];
 
-            
             Vector3 targetWorldPos =
                 cubeCenterWorld +
                 currentModel.transform.rotation * (basis.normal * (faceWorldSize / 2f));
@@ -190,7 +190,13 @@ public class NetToCubeFolder : MonoBehaviour
         if (finishedFaceCount >= 6 && !interactionEnabled)
         {
             interactionEnabled = true;
+
             SetupFinalPivotAndInteraction();
+
+            // Folding ?? ???????? ?? ??? subscribe ?? ??? script ??? ?????? ???
+            CubeFoldCompleted?.Invoke();
+
+            Debug.Log("Cube folding fully completed.");
         }
     }
 
@@ -218,7 +224,6 @@ public class NetToCubeFolder : MonoBehaviour
             if (face != null) face.SetParent(currentModel.transform, true);
         }
 
-        
         if (!currentModel.TryGetComponent<TouchRotateZoom>(out var rotateZoom))
             rotateZoom = currentModel.AddComponent<TouchRotateZoom>();
 
@@ -273,9 +278,6 @@ public class NetToCubeFolder : MonoBehaviour
         interactionEnabled = false;
         if (currentModel != null) Destroy(currentModel);
     }
-
-    // --- Getter Addition ---
-
 
     public Transform GetCurrentModelRoot()
     {

@@ -2,8 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-public class GuidedCylinderCreate3DManager :
-    MonoBehaviour
+public class GuidedCylinderCreate3DManager : MonoBehaviour
 {
     [Header("Cylinder References")]
 
@@ -25,12 +24,14 @@ public class GuidedCylinderCreate3DManager :
     [SerializeField]
     private ARModeManager arModeManager;
 
-    [Tooltip(
-        "Time from Create 3D click until AR mode starts. " +
-        "This includes folding + final preview time."
-    )]
+
+    [Header("Manual AR Transition")]
+
     [SerializeField]
-    private float arDelay = 10f;
+    private Button cylinderGoToARButton;
+
+    [SerializeField]
+    private GameObject mainBackground;
 
 
     [Header("UI")]
@@ -49,6 +50,29 @@ public class GuidedCylinderCreate3DManager :
 
 
     private bool creationStarted = false;
+    private Transform pendingARModelRoot;
+
+
+    // ==================================================
+    // INITIALIZATION & LISTENERS
+    // ==================================================
+
+    private void Start()
+    {
+        if (cylinderGoToARButton != null)
+        {
+            cylinderGoToARButton.gameObject.SetActive(false);
+
+            cylinderGoToARButton.onClick.RemoveListener(GoToAR);
+            cylinderGoToARButton.onClick.AddListener(GoToAR);
+        }
+
+        if (cylinderModelSpawner != null)
+        {
+            cylinderModelSpawner.CylinderFoldCompleted -= HandleCylinderFoldCompleted;
+            cylinderModelSpawner.CylinderFoldCompleted += HandleCylinderFoldCompleted;
+        }
+    }
 
 
     // ==================================================
@@ -67,21 +91,15 @@ public class GuidedCylinderCreate3DManager :
 
         if (netValidator == null)
         {
-            Debug.LogError(
-                "Cylinder validator is not assigned."
-            );
-
+            Debug.LogError("Cylinder validator is not assigned.");
             return;
         }
-
 
         if (!netValidator.CurrentNetValid)
         {
             if (statusText != null)
             {
-                statusText.text =
-                    "Please validate a correct " +
-                    "cylinder net first.";
+                statusText.text = "Please validate a correct cylinder net first.";
             }
 
             return;
@@ -94,38 +112,21 @@ public class GuidedCylinderCreate3DManager :
 
         if (setupManager == null)
         {
-            Debug.LogError(
-                "Cylinder setup manager " +
-                "is not assigned."
-            );
-
+            Debug.LogError("Cylinder setup manager is not assigned.");
             return;
         }
-
 
         if (puzzleBoard == null)
         {
-            Debug.LogError(
-                "Cylinder PuzzleBoard " +
-                "is not assigned."
-            );
-
+            Debug.LogError("Cylinder PuzzleBoard is not assigned.");
             return;
         }
 
+        CylinderGuidedConfig config = setupManager.GetConfig();
 
-        CylinderGuidedConfig config =
-            setupManager.GetConfig();
-
-
-        if (config == null ||
-            !config.IsReady)
+        if (config == null || !config.IsReady)
         {
-            Debug.LogError(
-                "Cylinder configuration " +
-                "is incomplete."
-            );
-
+            Debug.LogError("Cylinder configuration is incomplete.");
             return;
         }
 
@@ -135,28 +136,15 @@ public class GuidedCylinderCreate3DManager :
         // ----------------------------------------------
 
         CylinderGeneratedFace[] foundFaces =
-            puzzleBoard.GetComponentsInChildren<
-                CylinderGeneratedFace>(
-                false
-            );
-
+            puzzleBoard.GetComponentsInChildren<CylinderGeneratedFace>(false);
 
         if (foundFaces.Length != 3)
         {
-            Debug.LogError(
-                $"Expected 3 cylinder faces " +
-                $"on board, found " +
-                $"{foundFaces.Length}."
-            );
-
+            Debug.LogError($"Expected 3 cylinder faces on board, found {foundFaces.Length}.");
             return;
         }
 
-
-        List<CylinderGeneratedFace> faces =
-            new List<CylinderGeneratedFace>(
-                foundFaces
-            );
+        List<CylinderGeneratedFace> faces = new List<CylinderGeneratedFace>(foundFaces);
 
 
         // ----------------------------------------------
@@ -165,23 +153,15 @@ public class GuidedCylinderCreate3DManager :
 
         if (cylinderModelSpawner == null)
         {
-            Debug.LogError(
-                "CylinderModelSpawner " +
-                "is not assigned."
-            );
-
+            Debug.LogError("CylinderModelSpawner is not assigned.");
             return;
         }
 
-
         creationStarted = true;
-
 
         if (statusText != null)
         {
-            statusText.text =
-                "Your cylinder net is " +
-                "folding into 3D.";
+            statusText.text = "Your cylinder net is folding into 3D.";
         }
 
 
@@ -196,26 +176,16 @@ public class GuidedCylinderCreate3DManager :
             distanceFromCamera
         );
 
-
         /*
          * Get the newly-created model root.
-         *
          * The root already exists immediately,
-         * even though its folding animation
-         * is still running.
+         * even though its folding animation is still running.
          */
+        pendingARModelRoot = cylinderModelSpawner.GetCurrentModelRoot();
 
-        Transform modelRoot =
-            cylinderModelSpawner
-                .GetCurrentModelRoot();
-
-
-        if (modelRoot == null)
+        if (pendingARModelRoot == null)
         {
-            Debug.LogError(
-                "Cylinder 3D model root " +
-                "was not created."
-            );
+            Debug.LogError("Cylinder 3D model root was not created.");
 
             creationStarted = false;
 
@@ -232,20 +202,10 @@ public class GuidedCylinderCreate3DManager :
         // RESEARCH DATA — 3D GENERATED
         // ==================================================
 
-        /*
-         * The model root exists successfully.
-         * Therefore record that the valid cylinder net
-         * was converted into a 3D cylinder.
-         */
-
         if (SessionDataLogger.Instance != null)
         {
-            SessionDataLogger.Instance
-                .Log3DGeneration();
-
-            Debug.Log(
-                "Cylinder 3D generation logged."
-            );
+            SessionDataLogger.Instance.Log3DGeneration();
+            Debug.Log("Cylinder 3D generation logged.");
         }
         else
         {
@@ -257,47 +217,79 @@ public class GuidedCylinderCreate3DManager :
 
 
         // ----------------------------------------------
-        // HIDE 2D UI
+        // HIDE MAIN BACKGROUND
+        // ----------------------------------------------
+
+        if (mainBackground != null)
+        {
+            mainBackground.SetActive(false);
+        }
+
+
+        // ----------------------------------------------
+        // HIDE CYLINDER WORKSPACE
         // ----------------------------------------------
 
         if (drawingCanvas != null)
         {
-            drawingCanvas.SetActive(
-                false
-            );
+            drawingCanvas.SetActive(false);
         }
-
-
-        Debug.Log(
-            "Cylinder UI captured and " +
-            "Canvas hidden."
-        );
 
 
         // ----------------------------------------------
-        // SCHEDULE AR
+        // KEEP AR BUTTON HIDDEN WHILE FOLDING
         // ----------------------------------------------
 
-        if (arModeManager != null)
+        if (cylinderGoToARButton != null)
         {
-            arModeManager.StartARAfterDelay(
-                arDelay,
-                modelRoot
-            );
+            cylinderGoToARButton.gameObject.SetActive(false);
+        }
 
-            Debug.Log(
-                $"Cylinder AR transition " +
-                $"scheduled after {arDelay} seconds."
-            );
-        }
-        else
+        Debug.Log("Cylinder 3D folding started. Waiting for fold completion.");
+    }
+
+
+    // ==================================================
+    // FOLD COMPLETE & AR TRANSITION
+    // ==================================================
+
+    private void HandleCylinderFoldCompleted()
+    {
+        if (pendingARModelRoot == null)
         {
-            Debug.LogWarning(
-                "ARModeManager is not assigned. " +
-                "Cylinder will remain in " +
-                "normal 3D preview mode."
-            );
+            return;
         }
+
+        if (cylinderGoToARButton != null)
+        {
+            cylinderGoToARButton.gameObject.SetActive(true);
+        }
+
+        Debug.Log("Cylinder folding complete. Go To AR button is now visible.");
+    }
+
+    public void GoToAR()
+    {
+        if (pendingARModelRoot == null)
+        {
+            Debug.LogError("No Cylinder model is ready for AR.");
+            return;
+        }
+
+        if (arModeManager == null)
+        {
+            Debug.LogError("ARModeManager is not assigned.");
+            return;
+        }
+
+        if (cylinderGoToARButton != null)
+        {
+            cylinderGoToARButton.gameObject.SetActive(false);
+        }
+
+        arModeManager.StartARAfterDelay(0f, pendingARModelRoot);
+
+        Debug.Log("Cylinder Go To AR clicked. Starting AR placement mode.");
     }
 
 
@@ -308,33 +300,48 @@ public class GuidedCylinderCreate3DManager :
     public void ResetCreationState()
     {
         creationStarted = false;
+        pendingARModelRoot = null;
 
+        if (cylinderGoToARButton != null)
+        {
+            cylinderGoToARButton.gameObject.SetActive(false);
+        }
+
+        if (mainBackground != null)
+        {
+            mainBackground.SetActive(true);
+        }
 
         if (cylinderModelSpawner != null)
         {
-            cylinderModelSpawner
-                .ClearCylinder();
+            cylinderModelSpawner.ClearCylinder();
         }
-
 
         if (drawingCanvas != null)
         {
-            drawingCanvas.SetActive(
-                true
-            );
+            drawingCanvas.SetActive(true);
         }
-
 
         /*
          * Return from AR to normal mode
          * if Reset is ever called after AR.
          */
-
         if (arModeManager != null)
         {
-            arModeManager.SetARMode(
-                false
-            );
+            arModeManager.SetARMode(false);
+        }
+    }
+
+
+    // ==================================================
+    // CLEANUP
+    // ==================================================
+
+    private void OnDestroy()
+    {
+        if (cylinderModelSpawner != null)
+        {
+            cylinderModelSpawner.CylinderFoldCompleted -= HandleCylinderFoldCompleted;
         }
     }
 }

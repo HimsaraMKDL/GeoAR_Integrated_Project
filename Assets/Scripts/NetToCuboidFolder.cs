@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -19,6 +20,7 @@ public class NetToCuboidFolder : MonoBehaviour
 
     private int finishedFaceCount;
     private bool interactionEnabled;
+    public event Action CuboidFoldCompleted;
 
     private struct FaceBasis
     {
@@ -664,7 +666,14 @@ public class NetToCuboidFolder : MonoBehaviour
             !interactionEnabled)
         {
             interactionEnabled = true;
+
             SetupFinalPivotAndInteraction();
+
+            CuboidFoldCompleted?.Invoke();
+
+            Debug.Log(
+                "Cuboid fold completion event sent."
+            );
         }
     }
 

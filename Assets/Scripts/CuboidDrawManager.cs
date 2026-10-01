@@ -53,6 +53,12 @@ public class CuboidDrawManager : MonoBehaviour,
     [SerializeField] private GameObject drawingCanvas;
     [SerializeField] private ARModeManager arModeManager;
 
+    [Header("Manual AR Transition")]
+    [SerializeField] private Button cuboidGoToARButton;
+    [SerializeField] private GameObject mainBackground;
+
+    private Transform pendingARModelRoot;
+
     private RectTransform gridLayer;
     private RectTransform faceLayer;
     private RectTransform drawLayer;
@@ -130,6 +136,23 @@ public class CuboidDrawManager : MonoBehaviour,
 
         if (create3DButton != null)
             create3DButton.interactable = false;
+
+        if (cuboidGoToARButton != null)
+        {
+            cuboidGoToARButton.gameObject.SetActive(false);
+
+            cuboidGoToARButton.onClick.RemoveListener(GoToAR);
+            cuboidGoToARButton.onClick.AddListener(GoToAR);
+        }
+
+        if (cuboidModelSpawner != null)
+        {
+            cuboidModelSpawner.CuboidFoldCompleted -=
+                HandleCuboidFoldCompleted;
+
+            cuboidModelSpawner.CuboidFoldCompleted +=
+                HandleCuboidFoldCompleted;
+        }
 
         initialized = true;
 
@@ -620,6 +643,18 @@ public class CuboidDrawManager : MonoBehaviour,
 
     public void ClearDrawing()
     {
+        pendingARModelRoot = null;
+
+        if (cuboidGoToARButton != null)
+        {
+            cuboidGoToARButton.gameObject.SetActive(false);
+        }
+
+        if (mainBackground != null)
+        {
+            mainBackground.SetActive(true);
+        }
+
         isDrawing = false;
 
         drawnEdges.Clear();
@@ -835,7 +870,13 @@ public class CuboidDrawManager : MonoBehaviour,
             netValidator.GetInferredDimensions();
 
         List<CuboidFace> faceCopy =
-            new List<CuboidFace>(detectedFaces);
+            new List<CuboidFace>(
+                detectedFaces
+            );
+
+        // ==================================================
+        // CREATE + FOLD CUBOID
+        // ==================================================
 
         cuboidModelSpawner.CreateCuboidFromCanvasNet(
             faceCopy,
@@ -846,13 +887,18 @@ public class CuboidDrawManager : MonoBehaviour,
             2.5f
         );
 
-        Transform modelRoot =
+        // ==================================================
+        // STORE MODEL FOR MANUAL AR
+        // ==================================================
+
+        pendingARModelRoot =
             cuboidModelSpawner.GetCurrentModelRoot();
 
-        if (modelRoot == null)
+        if (pendingARModelRoot == null)
         {
             Debug.LogError(
-                "Cuboid model was not created. Transition cancelled."
+                "Cuboid model was not created. " +
+                "Transition cancelled."
             );
 
             if (statusText != null)
@@ -870,27 +916,103 @@ public class CuboidDrawManager : MonoBehaviour,
                 "Your cuboid net is converting into 3D.";
         }
 
-        /*
-         * The Canvas uses Screen Space Overlay.
-         * It must be hidden so the generated world-space
-         * cuboid can be seen by the normal camera.
-         */
+        // ==================================================
+        // HIDE FULL-SCREEN BACKGROUND
+        // ==================================================
+
+        if (mainBackground != null)
+        {
+            mainBackground.SetActive(false);
+        }
+
+        // ==================================================
+        // HIDE ONLY CUBOID WORKSPACE
+        // ==================================================
+
         if (drawingCanvas != null)
         {
             drawingCanvas.SetActive(false);
         }
 
-        /*
-         * The cuboid remains visible using the normal camera
-         * while its faces move and rotate for 3.2 seconds.
-         * After that, AR mode starts.
-         */
-        if (arModeManager != null)
+        // ==================================================
+        // WAIT FOR FOLD COMPLETION
+        // ==================================================
+
+        if (cuboidGoToARButton != null)
         {
-            arModeManager.StartARAfterDelay(
-                3.5f,
-                modelRoot
+            cuboidGoToARButton.gameObject.SetActive(false);
+        }
+
+        Debug.Log(
+            "Cuboid 3D folding started. " +
+            "Waiting for fold completion."
+        );
+    }
+
+    private void HandleCuboidFoldCompleted()
+    {
+        if (pendingARModelRoot == null)
+        {
+            return;
+        }
+
+        if (cuboidGoToARButton != null)
+        {
+            cuboidGoToARButton.gameObject.SetActive(
+                true
             );
+        }
+
+        Debug.Log(
+            "Cuboid folding complete. " +
+            "Go To AR button is now visible."
+        );
+    }
+
+    public void GoToAR()
+    {
+        if (pendingARModelRoot == null)
+        {
+            Debug.LogError(
+                "No Cuboid model is ready for AR."
+            );
+
+            return;
+        }
+
+        if (arModeManager == null)
+        {
+            Debug.LogError(
+                "ARModeManager is not assigned."
+            );
+
+            return;
+        }
+
+        if (cuboidGoToARButton != null)
+        {
+            cuboidGoToARButton.gameObject.SetActive(
+                false
+            );
+        }
+
+        arModeManager.StartARAfterDelay(
+            0f,
+            pendingARModelRoot
+        );
+
+        Debug.Log(
+            "Cuboid Go To AR clicked. " +
+            "Starting AR placement mode."
+        );
+    }
+
+    private void OnDestroy()
+    {
+        if (cuboidModelSpawner != null)
+        {
+            cuboidModelSpawner.CuboidFoldCompleted -=
+                HandleCuboidFoldCompleted;
         }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -7,6 +8,24 @@ public class CylinderModelSpawner : MonoBehaviour
     [SerializeField]
     private NetToCylinderFolder netToCylinderFolder;
 
+    public event Action CylinderFoldCompleted
+    {
+        add
+        {
+            if (netToCylinderFolder != null)
+            {
+                netToCylinderFolder.CylinderFoldCompleted += value;
+            }
+        }
+        remove
+        {
+            if (netToCylinderFolder != null)
+            {
+                netToCylinderFolder.CylinderFoldCompleted -= value;
+            }
+        }
+    }
+
     public void CreateCylinder(
         CylinderGuidedConfig config,
         List<CylinderGeneratedFace> sourceFaces,
@@ -15,10 +34,7 @@ public class CylinderModelSpawner : MonoBehaviour
     {
         if (netToCylinderFolder == null)
         {
-            Debug.LogError(
-                "CylinderModelSpawner: NetToCylinderFolder is not assigned."
-            );
-
+            Debug.LogError("CylinderModelSpawner: NetToCylinderFolder is not assigned.");
             return;
         }
 

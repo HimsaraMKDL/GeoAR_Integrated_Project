@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -44,6 +45,8 @@ public class NetToCylinderFolder : MonoBehaviour
     private GameObject wallObject;
     private GameObject topCircleObject;
     private GameObject bottomCircleObject;
+
+    public event Action CylinderFoldCompleted;
 
     private Mesh wallMesh;
 
@@ -472,7 +475,6 @@ public class NetToCylinderFolder : MonoBehaviour
         wallMesh.RecalculateNormals();
         wallMesh.RecalculateBounds();
     }
-
 
     // ==================================================
     // WALL MESH
@@ -1560,6 +1562,12 @@ public class NetToCylinderFolder : MonoBehaviour
 
         Debug.Log(
             "Cylinder interaction enabled."
+        );
+
+        CylinderFoldCompleted?.Invoke();
+
+        Debug.Log(
+            "Cylinder fold completion event sent."
         );
     }
 

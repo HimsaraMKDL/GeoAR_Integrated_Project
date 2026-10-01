@@ -19,6 +19,11 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     [Header("AR Mode")]
     public ARModeManager arModeManager;
 
+    [Header("Manual AR Transition")]
+    public Button goToARButton;
+    public GameObject mainBackground;
+    private Transform pendingARModelRoot;
+
     [Header("Buttons")]
     public Button undoButton;
     public Button validateButton;
@@ -92,7 +97,6 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
         if (clearButton != null)
         {
             clearButton.interactable = false;
-
             clearButton.onClick.RemoveListener(ClearDrawing);
             clearButton.onClick.AddListener(ClearDrawing);
         }
@@ -100,9 +104,36 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
         if (undoButton != null)
         {
             undoButton.interactable = false;
-
             undoButton.onClick.RemoveListener(UndoLastEdge);
             undoButton.onClick.AddListener(UndoLastEdge);
+        }
+
+        if (goToARButton != null)
+        {
+            goToARButton.gameObject.SetActive(false);
+            goToARButton.onClick.RemoveListener(GoToAR);
+            goToARButton.onClick.AddListener(GoToAR);
+        }
+
+        if (cubeModelSpawner != null &&
+            cubeModelSpawner.netToCubeFolder != null)
+        {
+            cubeModelSpawner.netToCubeFolder.CubeFoldCompleted -= HandleCubeFoldCompleted;
+            cubeModelSpawner.netToCubeFolder.CubeFoldCompleted += HandleCubeFoldCompleted;
+        }
+    }
+
+
+    // =========================================================
+    // ON DESTROY
+    // =========================================================
+
+    private void OnDestroy()
+    {
+        if (cubeModelSpawner != null &&
+            cubeModelSpawner.netToCubeFolder != null)
+        {
+            cubeModelSpawner.netToCubeFolder.CubeFoldCompleted -= HandleCubeFoldCompleted;
         }
     }
 
@@ -118,23 +149,12 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
         drawLayer = CreateLayer("DrawLayer");
     }
 
-
     private RectTransform CreateLayer(string layerName)
     {
-        GameObject layerObj =
-            new GameObject(
-                layerName,
-                typeof(RectTransform)
-            );
+        GameObject layerObj = new GameObject(layerName, typeof(RectTransform));
+        layerObj.transform.SetParent(drawingArea, false);
 
-        layerObj.transform.SetParent(
-            drawingArea,
-            false
-        );
-
-        RectTransform rt =
-            layerObj.GetComponent<RectTransform>();
-
+        RectTransform rt = layerObj.GetComponent<RectTransform>();
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = Vector2.zero;
@@ -152,15 +172,8 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     {
         for (int x = 0; x <= gridWidth; x++)
         {
-            Vector2 start =
-                GridToLocal(
-                    new Vector2Int(x, 0)
-                );
-
-            Vector2 end =
-                GridToLocal(
-                    new Vector2Int(x, gridHeight)
-                );
+            Vector2 start = GridToLocal(new Vector2Int(x, 0));
+            Vector2 end = GridToLocal(new Vector2Int(x, gridHeight));
 
             CreateLine(
                 gridLayer,
@@ -174,15 +187,8 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
 
         for (int y = 0; y <= gridHeight; y++)
         {
-            Vector2 start =
-                GridToLocal(
-                    new Vector2Int(0, y)
-                );
-
-            Vector2 actualEnd =
-                GridToLocal(
-                    new Vector2Int(gridWidth, y)
-                );
+            Vector2 start = GridToLocal(new Vector2Int(0, y));
+            Vector2 actualEnd = GridToLocal(new Vector2Int(gridWidth, y));
 
             CreateLine(
                 gridLayer,
@@ -200,13 +206,10 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     // POINTER DOWN
     // =========================================================
 
-    public void OnPointerDown(
-        PointerEventData eventData)
+    public void OnPointerDown(PointerEventData eventData)
     {
         isDrawing = true;
-
-        lastGridPoint =
-            ScreenToGridPoint(eventData);
+        lastGridPoint = ScreenToGridPoint(eventData);
     }
 
 
@@ -214,24 +217,17 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     // DRAG
     // =========================================================
 
-    public void OnDrag(
-        PointerEventData eventData)
+    public void OnDrag(PointerEventData eventData)
     {
         if (!isDrawing)
             return;
 
-        Vector2Int currentGridPoint =
-            ScreenToGridPoint(eventData);
+        Vector2Int currentGridPoint = ScreenToGridPoint(eventData);
 
         if (currentGridPoint != lastGridPoint)
         {
-            AddSnappedPath(
-                lastGridPoint,
-                currentGridPoint
-            );
-
-            lastGridPoint =
-                currentGridPoint;
+            AddSnappedPath(lastGridPoint, currentGridPoint);
+            lastGridPoint = currentGridPoint;
         }
     }
 
@@ -240,25 +236,17 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     // POINTER UP
     // =========================================================
 
-    public void OnPointerUp(
-        PointerEventData eventData)
+    public void OnPointerUp(PointerEventData eventData)
     {
         isDrawing = false;
-
         DetectFaces();
-
         currentNetIsValid = false;
 
         if (create3DButton != null)
-        {
             create3DButton.interactable = false;
-        }
 
         if (validateButton != null)
-        {
-            validateButton.interactable =
-                detectedFaces.Count == 6;
-        }
+            validateButton.interactable = detectedFaces.Count == 6;
 
         UpdateUndoButtonState();
 
@@ -266,13 +254,11 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
         {
             if (detectedFaces.Count == 6)
             {
-                statusText.text =
-                    "6 faces completed. Tap Validate to check your cube net.";
+                statusText.text = "6 faces completed. Tap Validate to check your cube net.";
             }
             else
             {
-                statusText.text =
-                    $"Detected faces: {detectedFaces.Count} / 6";
+                statusText.text = $"Detected faces: {detectedFaces.Count} / 6";
             }
         }
     }
@@ -282,8 +268,7 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     // SCREEN TO GRID
     // =========================================================
 
-    private Vector2Int ScreenToGridPoint(
-        PointerEventData eventData)
+    private Vector2Int ScreenToGridPoint(PointerEventData eventData)
     {
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
             drawingArea,
@@ -292,42 +277,16 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
             out Vector2 localPoint
         );
 
-        float x =
-            localPoint.x +
-            drawingArea.rect.width / 2f;
+        float x = localPoint.x + drawingArea.rect.width / 2f;
+        float y = localPoint.y + drawingArea.rect.height / 2f;
 
-        float y =
-            localPoint.y +
-            drawingArea.rect.height / 2f;
+        int gx = Mathf.RoundToInt(x / CellWidth);
+        int gy = Mathf.RoundToInt(y / CellHeight);
 
-        int gx =
-            Mathf.RoundToInt(
-                x / CellWidth
-            );
+        gx = Mathf.Clamp(gx, 0, gridWidth);
+        gy = Mathf.Clamp(gy, 0, gridHeight);
 
-        int gy =
-            Mathf.RoundToInt(
-                y / CellHeight
-            );
-
-        gx =
-            Mathf.Clamp(
-                gx,
-                0,
-                gridWidth
-            );
-
-        gy =
-            Mathf.Clamp(
-                gy,
-                0,
-                gridHeight
-            );
-
-        return new Vector2Int(
-            gx,
-            gy
-        );
+        return new Vector2Int(gx, gy);
     }
 
 
@@ -335,21 +294,12 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     // GRID TO LOCAL
     // =========================================================
 
-    private Vector2 GridToLocal(
-        Vector2Int gridPoint)
+    private Vector2 GridToLocal(Vector2Int gridPoint)
     {
-        float x =
-            gridPoint.x * CellWidth -
-            drawingArea.rect.width / 2f;
+        float x = gridPoint.x * CellWidth - drawingArea.rect.width / 2f;
+        float y = gridPoint.y * CellHeight - drawingArea.rect.height / 2f;
 
-        float y =
-            gridPoint.y * CellHeight -
-            drawingArea.rect.height / 2f;
-
-        return new Vector2(
-            x,
-            y
-        );
+        return new Vector2(x, y);
     }
 
 
@@ -357,59 +307,27 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     // ADD SNAPPED PATH
     // =========================================================
 
-    private void AddSnappedPath(
-        Vector2Int from,
-        Vector2Int to)
+    private void AddSnappedPath(Vector2Int from, Vector2Int to)
     {
         if (from == to)
             return;
 
         if (from.x == to.x)
         {
-            int step =
-                to.y > from.y
-                    ? 1
-                    : -1;
+            int step = to.y > from.y ? 1 : -1;
 
-            for (
-                int y = from.y;
-                y != to.y;
-                y += step)
+            for (int y = from.y; y != to.y; y += step)
             {
-                AddEdge(
-                    new Vector2Int(
-                        from.x,
-                        y
-                    ),
-                    new Vector2Int(
-                        from.x,
-                        y + step
-                    )
-                );
+                AddEdge(new Vector2Int(from.x, y), new Vector2Int(from.x, y + step));
             }
         }
         else if (from.y == to.y)
         {
-            int step =
-                to.x > from.x
-                    ? 1
-                    : -1;
+            int step = to.x > from.x ? 1 : -1;
 
-            for (
-                int x = from.x;
-                x != to.x;
-                x += step)
+            for (int x = from.x; x != to.x; x += step)
             {
-                AddEdge(
-                    new Vector2Int(
-                        x,
-                        from.y
-                    ),
-                    new Vector2Int(
-                        x + step,
-                        from.y
-                    )
-                );
+                AddEdge(new Vector2Int(x, from.y), new Vector2Int(x + step, from.y));
             }
         }
     }
@@ -419,71 +337,33 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     // ADD EDGE
     // =========================================================
 
-    private void AddEdge(
-        Vector2Int a,
-        Vector2Int b)
+    private void AddEdge(Vector2Int a, Vector2Int b)
     {
         if (invalidPopupRoutine != null)
         {
-            StopCoroutine(
-                invalidPopupRoutine
-            );
-
+            StopCoroutine(invalidPopupRoutine);
             invalidPopupRoutine = null;
         }
 
-        GridEdge edge =
-            new GridEdge(
-                a,
-                b
-            );
+        GridEdge edge = new GridEdge(a, b);
 
         if (drawnEdges.Contains(edge))
             return;
 
-
-        // =====================================================
-        // START RESEARCH ATTEMPT
-        // =====================================================
-
-        if (SessionDataLogger.Instance != null)
+        if (SessionDataLogger.Instance != null && edgeHistory.Count == 0)
         {
-            /*
-             * Start the Cube activity automatically
-             * when the first drawing begins.
-             *
-             * StartAttempt() is only called when
-             * there is currently no active attempt.
-             */
-
-            if (edgeHistory.Count == 0)
-            {
-                SessionDataLogger.Instance
-                    .StartActivitySession("Cube");
-
-                SessionDataLogger.Instance
-                    .StartAttempt();
-            }
+            SessionDataLogger.Instance.StartActivitySession("Cube");
+            SessionDataLogger.Instance.StartAttempt();
         }
-
 
         drawnEdges.Add(edge);
-
         edgeHistory.Add(edge);
 
-
         if (clearButton != null)
-        {
             clearButton.interactable = true;
-        }
 
-
-        Vector2 localA =
-            GridToLocal(a);
-
-        Vector2 localB =
-            GridToLocal(b);
-
+        Vector2 localA = GridToLocal(a);
+        Vector2 localB = GridToLocal(b);
 
         CreateLine(
             drawLayer,
@@ -494,40 +374,27 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
             "DrawnEdge"
         );
 
-
         currentNetIsValid = false;
-
 
         if (create3DButton != null)
             create3DButton.interactable = false;
 
-
         DetectFaces();
 
-
         if (validateButton != null)
-        {
-            validateButton.interactable =
-                detectedFaces.Count == 6;
-        }
-
+            validateButton.interactable = detectedFaces.Count == 6;
 
         UpdateUndoButtonState();
-
 
         if (statusText != null)
         {
             if (detectedFaces.Count >= 6)
             {
-                statusText.text =
-                    "6 faces completed. Please validate your cube net.";
+                statusText.text = "6 faces completed. Please validate your cube net.";
             }
             else
             {
-                statusText.text =
-                    "Detected faces: " +
-                    detectedFaces.Count +
-                    " / 6";
+                statusText.text = $"Detected faces: {detectedFaces.Count} / 6";
             }
         }
     }
@@ -542,67 +409,37 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
         if (undoButton == null)
             return;
 
-        undoButton.interactable =
-            edgeHistory.Count > 0 &&
-            detectedFaces.Count < 6;
+        undoButton.interactable = edgeHistory.Count > 0 && detectedFaces.Count < 6;
     }
-
 
     public void UndoLastEdge()
     {
         if (edgeHistory.Count == 0)
             return;
 
-        GridEdge lastEdge =
-            edgeHistory[
-                edgeHistory.Count - 1
-            ];
-
-        edgeHistory.RemoveAt(
-            edgeHistory.Count - 1
-        );
-
-        drawnEdges.Remove(
-            lastEdge
-        );
-
+        GridEdge lastEdge = edgeHistory[edgeHistory.Count - 1];
+        edgeHistory.RemoveAt(edgeHistory.Count - 1);
+        drawnEdges.Remove(lastEdge);
 
         RebuildDrawnLines();
 
         currentNetIsValid = false;
 
-
         if (create3DButton != null)
             create3DButton.interactable = false;
 
-
         DetectFaces();
 
-
         if (validateButton != null)
-        {
-            validateButton.interactable =
-                detectedFaces.Count == 6;
-        }
-
+            validateButton.interactable = detectedFaces.Count == 6;
 
         UpdateUndoButtonState();
 
-
         if (clearButton != null)
-        {
-            clearButton.interactable =
-                edgeHistory.Count > 0;
-        }
-
+            clearButton.interactable = edgeHistory.Count > 0;
 
         if (statusText != null)
-        {
-            statusText.text =
-                "Undo complete. Detected faces: " +
-                detectedFaces.Count +
-                " / 6";
-        }
+            statusText.text = $"Undo complete. Detected faces: {detectedFaces.Count} / 6";
     }
 
 
@@ -612,24 +449,15 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
 
     private void RebuildDrawnLines()
     {
-        foreach (Transform child
-                 in drawLayer)
+        foreach (Transform child in drawLayer)
         {
-            Destroy(
-                child.gameObject
-            );
+            Destroy(child.gameObject);
         }
 
-
-        foreach (GridEdge edge
-                 in drawnEdges)
+        foreach (GridEdge edge in drawnEdges)
         {
-            Vector2 localA =
-                GridToLocal(edge.a);
-
-            Vector2 localB =
-                GridToLocal(edge.b);
-
+            Vector2 localA = GridToLocal(edge.a);
+            Vector2 localB = GridToLocal(edge.b);
 
             CreateLine(
                 drawLayer,
@@ -651,91 +479,26 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     {
         detectedFaces.Clear();
 
-
-        for (
-            int x = 0;
-            x < gridWidth;
-            x++)
+        for (int x = 0; x < gridWidth; x++)
         {
-            for (
-                int y = 0;
-                y < gridHeight;
-                y++)
+            for (int y = 0; y < gridHeight; y++)
             {
-                Vector2Int bottomLeft =
-                    new Vector2Int(
-                        x,
-                        y
-                    );
+                Vector2Int bottomLeft = new Vector2Int(x, y);
+                Vector2Int bottomRight = new Vector2Int(x + 1, y);
+                Vector2Int topLeft = new Vector2Int(x, y + 1);
+                Vector2Int topRight = new Vector2Int(x + 1, y + 1);
 
-                Vector2Int bottomRight =
-                    new Vector2Int(
-                        x + 1,
-                        y
-                    );
+                bool bottom = drawnEdges.Contains(new GridEdge(bottomLeft, bottomRight));
+                bool top = drawnEdges.Contains(new GridEdge(topLeft, topRight));
+                bool left = drawnEdges.Contains(new GridEdge(bottomLeft, topLeft));
+                bool right = drawnEdges.Contains(new GridEdge(bottomRight, topRight));
 
-                Vector2Int topLeft =
-                    new Vector2Int(
-                        x,
-                        y + 1
-                    );
-
-                Vector2Int topRight =
-                    new Vector2Int(
-                        x + 1,
-                        y + 1
-                    );
-
-
-                bool bottom =
-                    drawnEdges.Contains(
-                        new GridEdge(
-                            bottomLeft,
-                            bottomRight
-                        )
-                    );
-
-                bool top =
-                    drawnEdges.Contains(
-                        new GridEdge(
-                            topLeft,
-                            topRight
-                        )
-                    );
-
-                bool left =
-                    drawnEdges.Contains(
-                        new GridEdge(
-                            bottomLeft,
-                            topLeft
-                        )
-                    );
-
-                bool right =
-                    drawnEdges.Contains(
-                        new GridEdge(
-                            bottomRight,
-                            topRight
-                        )
-                    );
-
-
-                if (
-                    bottom &&
-                    top &&
-                    left &&
-                    right)
+                if (bottom && top && left && right)
                 {
-                    detectedFaces.Add(
-                        new Vector2Int(
-                            x,
-                            y
-                        )
-                    );
+                    detectedFaces.Add(new Vector2Int(x, y));
                 }
             }
         }
-
 
         RefreshFaceVisuals();
     }
@@ -747,159 +510,66 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
 
     private void RefreshFaceVisuals()
     {
-        foreach (GameObject obj
-                 in faceObjects)
+        foreach (GameObject obj in faceObjects)
         {
             Destroy(obj);
         }
 
-
         faceObjects.Clear();
 
+        List<Vector2Int> sortedFaces = new List<Vector2Int>(detectedFaces);
 
-        List<Vector2Int> sortedFaces =
-            new List<Vector2Int>(
-                detectedFaces
-            );
-
-
-        sortedFaces.Sort(
-            (a, b) =>
-            {
-                if (a.y == b.y)
-                    return a.x.CompareTo(b.x);
-
-                return b.y.CompareTo(a.y);
-            }
-        );
-
-
-        for (
-            int i = 0;
-            i < sortedFaces.Count;
-            i++)
+        sortedFaces.Sort((a, b) =>
         {
-            Vector2Int cell =
-                sortedFaces[i];
+            if (a.y == b.y)
+                return a.x.CompareTo(b.x);
 
+            return b.y.CompareTo(a.y);
+        });
 
-            GameObject faceObj =
-                new GameObject(
-                    "DetectedFace_" +
-                    (i + 1),
-                    typeof(Image)
-                );
+        for (int i = 0; i < sortedFaces.Count; i++)
+        {
+            Vector2Int cell = sortedFaces[i];
 
+            GameObject faceObj = new GameObject("DetectedFace_" + (i + 1), typeof(Image));
+            faceObj.transform.SetParent(faceLayer, false);
 
-            faceObj.transform.SetParent(
-                faceLayer,
-                false
-            );
-
-
-            Image img =
-                faceObj.GetComponent<Image>();
-
-
-            img.color =
-                validFaceColor;
-
+            Image img = faceObj.GetComponent<Image>();
+            img.color = validFaceColor;
             img.raycastTarget = false;
 
+            RectTransform rt = faceObj.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(CellWidth, CellHeight);
 
-            RectTransform rt =
-                faceObj.GetComponent<
-                    RectTransform
-                >();
+            Vector2 center = GridToLocal(cell) + new Vector2(CellWidth / 2f, CellHeight / 2f);
+            rt.anchoredPosition = center;
 
+            GameObject numberObj = new GameObject("FaceNumber_" + (i + 1), typeof(Text));
+            numberObj.transform.SetParent(faceObj.transform, false);
 
-            rt.sizeDelta =
-                new Vector2(
-                    CellWidth,
-                    CellHeight
-                );
-
-
-            Vector2 center =
-                GridToLocal(cell) +
-                new Vector2(
-                    CellWidth / 2f,
-                    CellHeight / 2f
-                );
-
-
-            rt.anchoredPosition =
-                center;
-
-
-            GameObject numberObj =
-                new GameObject(
-                    "FaceNumber_" +
-                    (i + 1),
-                    typeof(Text)
-                );
-
-
-            numberObj.transform.SetParent(
-                faceObj.transform,
-                false
-            );
-
-
-            Text numberText =
-                numberObj.GetComponent<Text>();
-
-
-            numberText.text =
-                (i + 1).ToString();
-
-            numberText.alignment =
-                TextAnchor.MiddleCenter;
-
-            numberText.color =
-                numberColor;
-
+            Text numberText = numberObj.GetComponent<Text>();
+            numberText.text = (i + 1).ToString();
+            numberText.alignment = TextAnchor.MiddleCenter;
+            numberText.color = numberColor;
             numberText.fontSize = 28;
-
             numberText.raycastTarget = false;
-
 
             if (numberFont != null)
             {
-                numberText.font =
-                    numberFont;
+                numberText.font = numberFont;
             }
             else
             {
-                numberText.font =
-                    Resources.GetBuiltinResource<Font>(
-                        "LegacyRuntime.ttf"
-                    );
+                numberText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             }
 
+            RectTransform numberRT = numberObj.GetComponent<RectTransform>();
+            numberRT.anchorMin = Vector2.zero;
+            numberRT.anchorMax = Vector2.one;
+            numberRT.offsetMin = Vector2.zero;
+            numberRT.offsetMax = Vector2.zero;
 
-            RectTransform numberRT =
-                numberObj.GetComponent<
-                    RectTransform
-                >();
-
-
-            numberRT.anchorMin =
-                Vector2.zero;
-
-            numberRT.anchorMax =
-                Vector2.one;
-
-            numberRT.offsetMin =
-                Vector2.zero;
-
-            numberRT.offsetMax =
-                Vector2.zero;
-
-
-            faceObjects.Add(
-                faceObj
-            );
+            faceObjects.Add(faceObj);
         }
     }
 
@@ -910,17 +580,12 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
 
     private void HighlightInvalidFaces()
     {
-        foreach (GameObject obj
-                 in faceObjects)
+        foreach (GameObject obj in faceObjects)
         {
-            Image img =
-                obj.GetComponent<Image>();
-
-
+            Image img = obj.GetComponent<Image>();
             if (img != null)
             {
-                img.color =
-                    invalidFaceColor;
+                img.color = invalidFaceColor;
             }
         }
     }
@@ -938,68 +603,22 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
         Color color,
         string lineName)
     {
-        GameObject lineObj =
-            new GameObject(
-                lineName,
-                typeof(Image)
-            );
+        GameObject lineObj = new GameObject(lineName, typeof(Image));
+        lineObj.transform.SetParent(parent, false);
 
-
-        lineObj.transform.SetParent(
-            parent,
-            false
-        );
-
-
-        Image img =
-            lineObj.GetComponent<Image>();
-
-
-        img.color =
-            color;
-
+        Image img = lineObj.GetComponent<Image>();
+        img.color = color;
         img.raycastTarget = false;
 
+        RectTransform rt = lineObj.GetComponent<RectTransform>();
+        Vector2 direction = end - start;
+        float length = direction.magnitude;
 
-        RectTransform rt =
-            lineObj.GetComponent<
-                RectTransform
-            >();
+        rt.sizeDelta = new Vector2(length, thickness);
+        rt.anchoredPosition = (start + end) / 2f;
 
-
-        Vector2 direction =
-            end - start;
-
-
-        float length =
-            direction.magnitude;
-
-
-        rt.sizeDelta =
-            new Vector2(
-                length,
-                thickness
-            );
-
-
-        rt.anchoredPosition =
-            (start + end) / 2f;
-
-
-        float angle =
-            Mathf.Atan2(
-                direction.y,
-                direction.x
-            ) *
-            Mathf.Rad2Deg;
-
-
-        rt.localRotation =
-            Quaternion.Euler(
-                0f,
-                0f,
-                angle
-            );
+        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+        rt.localRotation = Quaternion.Euler(0f, 0f, angle);
     }
 
 
@@ -1011,17 +630,10 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     {
         DetectFaces();
 
-
-        currentNetIsValid =
-            CubeNetValidator.ValidateCubeNet(
-                detectedFaces,
-                out string message
-            );
-
-
-        // =====================================================
-        // SAVE RESEARCH VALIDATION DATA
-        // =====================================================
+        currentNetIsValid = CubeNetValidator.ValidateCubeNet(
+            detectedFaces,
+            out string message
+        );
 
         if (SessionDataLogger.Instance != null)
         {
@@ -1033,84 +645,38 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
             );
         }
 
-
-        // =====================================================
-        // VALID
-        // =====================================================
-
         if (currentNetIsValid)
         {
             if (statusText != null)
-            {
-                statusText.text =
-                    message;
-            }
-
+                statusText.text = message;
 
             if (create3DButton != null)
-            {
-                create3DButton.interactable =
-                    true;
-            }
-
+                create3DButton.interactable = true;
 
             if (invalidPopupManager != null)
-            {
                 invalidPopupManager.HideInvalidPopup();
-            }
 
-
-            Debug.Log(
-                "Cube net VALID."
-            );
+            Debug.Log("Cube net VALID.");
         }
-
-
-        // =====================================================
-        // INVALID
-        // =====================================================
-
         else
         {
             if (statusText != null)
-            {
-                statusText.text =
-                    message;
-            }
-
+                statusText.text = message;
 
             if (create3DButton != null)
-            {
-                create3DButton.interactable =
-                    false;
-            }
-
+                create3DButton.interactable = false;
 
             HighlightInvalidFaces();
 
-
             if (invalidPopupRoutine != null)
             {
-                StopCoroutine(
-                    invalidPopupRoutine
-                );
+                StopCoroutine(invalidPopupRoutine);
             }
 
+            invalidPopupRoutine = StartCoroutine(ShowInvalidPopupAfterDelay(message));
 
-            invalidPopupRoutine =
-                StartCoroutine(
-                    ShowInvalidPopupAfterDelay(
-                        message
-                    )
-                );
-
-
-            Debug.LogWarning(
-                "Cube net INVALID: " +
-                message
-            );
+            Debug.LogWarning("Cube net INVALID: " + message);
         }
-
 
         UpdateUndoButtonState();
     }
@@ -1120,27 +686,18 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     // INVALID POPUP DELAY
     // =========================================================
 
-    private IEnumerator ShowInvalidPopupAfterDelay(
-        string message)
+    private IEnumerator ShowInvalidPopupAfterDelay(string message)
     {
-        yield return new WaitForSeconds(
-            invalidPopupDelay
-        );
-
+        yield return new WaitForSeconds(invalidPopupDelay);
 
         if (invalidPopupManager != null)
         {
-            invalidPopupManager.ShowInvalidCubePopup(
-                message
-            );
+            invalidPopupManager.ShowInvalidCubePopup(message);
         }
         else
         {
-            Debug.LogError(
-                "InvalidNetPopupManager is not assigned."
-            );
+            Debug.LogError("InvalidNetPopupManager is not assigned.");
         }
-
 
         invalidPopupRoutine = null;
     }
@@ -1156,30 +713,20 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
         {
             if (statusText != null)
             {
-                statusText.text =
-                    "Please validate a correct cube net first.";
+                statusText.text = "Please validate a correct cube net first.";
             }
-
             return;
         }
-
 
         if (cubeModelSpawner == null)
         {
-            Debug.LogError(
-                "CubeModelSpawner is not assigned."
-            );
-
+            Debug.LogError("CubeModelSpawner is not assigned.");
             return;
         }
 
+        HashSet<Vector2Int> netFacesCopy = new HashSet<Vector2Int>(detectedFaces);
 
-        HashSet<Vector2Int> netFacesCopy =
-            new HashSet<Vector2Int>(
-                detectedFaces
-            );
-
-
+        // CREATE + FOLD 3D CUBE
         cubeModelSpawner.CreateCubeFromCanvasNet(
             netFacesCopy,
             drawingArea,
@@ -1188,45 +735,84 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
             2.5f
         );
 
+        // STORE MODEL FOR LATER AR USE
+        pendingARModelRoot = cubeModelSpawner.GetCurrentModelRoot();
 
-        // =====================================================
-        // SAVE 3D GENERATION
-        // =====================================================
-
-        if (SessionDataLogger.Instance != null)
+        if (pendingARModelRoot == null)
         {
-            SessionDataLogger.Instance
-                .Log3DGeneration();
+            Debug.LogError("Cube model root was not created.");
+            return;
         }
 
+        // RESEARCH DATA
+        if (SessionDataLogger.Instance != null)
+        {
+            SessionDataLogger.Instance.Log3DGeneration();
+        }
 
+        // HIDE UI BACKGROUND
+        if (mainBackground != null)
+        {
+            mainBackground.SetActive(false);
+        }
+
+        // HIDE CUBE WORKSPACE
         if (drawingCanvas != null)
         {
             drawingCanvas.SetActive(false);
         }
 
-
-        if (
-            arModeManager != null &&
-            cubeModelSpawner != null)
+        // KEEP GO TO AR HIDDEN UNTIL FOLD IS COMPLETE
+        if (goToARButton != null)
         {
-            Transform modelRoot =
-                cubeModelSpawner
-                    .GetCurrentModelRoot();
-
-
-            arModeManager.StartARAfterDelay(
-                3.5f,
-                modelRoot
-            );
+            goToARButton.gameObject.SetActive(false);
         }
 
+        Debug.Log("Cube 3D folding started. Waiting for fold completion.");
+    }
 
-        if (statusText != null)
+
+    // =========================================================
+    // EVENT CALLBACK & MANUAL AR TRANSITION
+    // =========================================================
+
+    private void HandleCubeFoldCompleted()
+    {
+        if (pendingARModelRoot == null)
         {
-            statusText.text =
-                "Your drawn net is converting into 3D.";
+            return;
         }
+
+        if (goToARButton != null)
+        {
+            goToARButton.gameObject.SetActive(true);
+        }
+
+        Debug.Log("Cube folding complete. Go To AR button is now visible.");
+    }
+
+    public void GoToAR()
+    {
+        if (pendingARModelRoot == null)
+        {
+            Debug.LogError("No Cube model is ready for AR.");
+            return;
+        }
+
+        if (arModeManager == null)
+        {
+            Debug.LogError("ARModeManager is not assigned.");
+            return;
+        }
+
+        if (goToARButton != null)
+        {
+            goToARButton.gameObject.SetActive(false);
+        }
+
+        arModeManager.StartARAfterDelay(0f, pendingARModelRoot);
+
+        Debug.Log("Go To AR clicked. Starting AR placement mode.");
     }
 
 
@@ -1236,63 +822,54 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
 
     public void ClearDrawing()
     {
+        pendingARModelRoot = null;
+
+        if (goToARButton != null)
+        {
+            goToARButton.gameObject.SetActive(false);
+        }
+
+        if (mainBackground != null)
+        {
+            mainBackground.SetActive(true);
+        }
+
         if (invalidPopupRoutine != null)
         {
-            StopCoroutine(
-                invalidPopupRoutine
-            );
-
+            StopCoroutine(invalidPopupRoutine);
             invalidPopupRoutine = null;
         }
 
-
-        foreach (Transform child
-                 in drawLayer)
+        foreach (Transform child in drawLayer)
         {
-            Destroy(
-                child.gameObject
-            );
+            Destroy(child.gameObject);
         }
 
-
         drawnEdges.Clear();
-
         edgeHistory.Clear();
-
         detectedFaces.Clear();
-
 
         RefreshFaceVisuals();
 
-
         currentNetIsValid = false;
-
 
         if (create3DButton != null)
             create3DButton.interactable = false;
 
-
         if (validateButton != null)
             validateButton.interactable = false;
-
 
         if (undoButton != null)
             undoButton.interactable = false;
 
-
         if (clearButton != null)
             clearButton.interactable = false;
-
 
         if (cubeModelSpawner != null)
             cubeModelSpawner.ClearCube();
 
-
         if (statusText != null)
-        {
-            statusText.text =
-                "Draw cube net edges on the grid.";
-        }
+            statusText.text = "Draw cube net edges on the grid.";
     }
 
 
@@ -1302,23 +879,18 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
 
     public HashSet<Vector2Int> GetDetectedFacesCopy()
     {
-        return new HashSet<Vector2Int>(
-            detectedFaces
-        );
+        return new HashSet<Vector2Int>(detectedFaces);
     }
-
 
     public RectTransform GetDrawingArea()
     {
         return drawingArea;
     }
 
-
     public int GetGridWidth()
     {
         return gridWidth;
     }
-
 
     public int GetGridHeight()
     {
@@ -1330,23 +902,14 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     // INNER STRUCT
     // =========================================================
 
-    private struct GridEdge :
-        IEquatable<GridEdge>
+    private struct GridEdge : IEquatable<GridEdge>
     {
         public Vector2Int a;
         public Vector2Int b;
 
-
-        public GridEdge(
-            Vector2Int p1,
-            Vector2Int p2)
+        public GridEdge(Vector2Int p1, Vector2Int p2)
         {
-            if (
-                p1.x < p2.x ||
-                (
-                    p1.x == p2.x &&
-                    p1.y <= p2.y
-                ))
+            if (p1.x < p2.x || (p1.x == p2.x && p1.y <= p2.y))
             {
                 a = p1;
                 b = p2;
@@ -1358,30 +921,19 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
             }
         }
 
-
-        public bool Equals(
-            GridEdge other)
+        public bool Equals(GridEdge other)
         {
-            return
-                a == other.a &&
-                b == other.b;
+            return a == other.a && b == other.b;
         }
 
-
-        public override bool Equals(
-            object obj)
+        public override bool Equals(object obj)
         {
-            return
-                obj is GridEdge other &&
-                Equals(other);
+            return obj is GridEdge other && Equals(other);
         }
-
 
         public override int GetHashCode()
         {
-            return
-                a.GetHashCode() ^
-                b.GetHashCode();
+            return a.GetHashCode() ^ b.GetHashCode();
         }
     }
 }
