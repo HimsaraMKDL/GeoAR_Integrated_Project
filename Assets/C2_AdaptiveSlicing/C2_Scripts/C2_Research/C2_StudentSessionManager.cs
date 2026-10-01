@@ -1,469 +1,226 @@
 using System;
 using System.Globalization;
-using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEngine.UI;
 
+/// <summary>
+/// Name-based login compatible with the existing serialized InputField, Text,
+/// Button and C2_AppUIManager. The logger stores the entered name in StudentID,
+/// with an independent SessionID. No ST0001 validation and no forced uppercase.
+/// </summary>
 public class C2_StudentSessionManager : MonoBehaviour
 {
-    // =========================================================
-    // STUDENT ID FORMAT
-    // =========================================================
-    //
-    // Required format:
-    //
-    // ST0001
-    //
-    // ST + exactly four digits.
-    //
-    // Examples:
-    //
-    // ST0001
-    // ST0025
-    // ST1234
-    //
-    // =========================================================
-
-    private static readonly Regex StudentIdPattern =
-        new Regex(
-            @"^ST\d{4}$",
-            RegexOptions.Compiled |
-            RegexOptions.CultureInvariant
-        );
-
-
-    // =========================================================
-    // LOGIN UI REFERENCES
-    // =========================================================
-
-    [Header("Login UI References")]
-
-    [SerializeField]
-    private InputField studentIdInputField;
-
-
-    [SerializeField]
-    private Text loginErrorText;
-
-
-    [SerializeField]
-    private Button loginContinueButton;
-
-
-    // =========================================================
-    // APPLICATION REFERENCES
-    // =========================================================
+    [Header("Existing Login UI References")]
+    [SerializeField] private InputField studentIdInputField;
+    [SerializeField] private Text loginErrorText;
+    [SerializeField] private Button loginContinueButton;
 
     [Header("Application References")]
-
-    [SerializeField]
-    private C2_AppUIManager uiManager;
-
-
-    // =========================================================
-    // CURRENT SESSION
-    // =========================================================
+    [SerializeField] private C2_AppUIManager uiManager;
+    [SerializeField] private C2_ResearchDataLogger researchDataLogger;
+    // Optional: assign the AR-placement GameObject to clean up between users.
+    // A GameObject reference avoids introducing an additional script dependency.
+    [SerializeField] private GameObject placementManagerObject;
 
     [Header("Current Session - Read Only During Play")]
-
-    [SerializeField]
-    private bool sessionActive =
-        false;
-
-
-    [SerializeField]
-    private string currentStudentId =
-        "";
-
-
-    [SerializeField]
-    private string currentSessionId =
-        "";
-
-
-    [SerializeField]
-    private string sessionStartLocal =
-        "";
-
-
-    [SerializeField]
-    private string sessionStartUtc =
-        "";
-
-
-    // =========================================================
-    // INTERNAL TIME VALUES
-    // =========================================================
+    [SerializeField] private bool sessionActive;
+    [SerializeField] private bool sessionCompleted;
+    [SerializeField] private string currentStudentId = "";
+    [SerializeField] private string currentSessionId = "";
+    [SerializeField] private string sessionStartLocal = "";
+    [SerializeField] private string sessionStartUtc = "";
+    [SerializeField] private double finalSessionSeconds;
 
     private DateTimeOffset sessionStartUtcValue;
 
-
-    // =========================================================
-    // PUBLIC SESSION INFORMATION
-    // =========================================================
-
-    public bool SessionActive
-        => sessionActive;
-
-
-    public string CurrentStudentId
-        => currentStudentId;
-
-
-    public string CurrentSessionId
-        => currentSessionId;
-
-
-    public string SessionStartLocal
-        => sessionStartLocal;
-
-
-    public string SessionStartUtc
-        => sessionStartUtc;
-
-
-    public double ElapsedSessionSeconds
-    {
-        get
-        {
-            if (!sessionActive)
-            {
-                return 0.0;
-            }
-
-
-            TimeSpan elapsed =
-                DateTimeOffset.UtcNow -
-                sessionStartUtcValue;
-
-
-            return
-                elapsed.TotalSeconds;
-        }
-    }
-
-
-    // =========================================================
-    // UNITY START
-    // =========================================================
+    public bool SessionActive => sessionActive;
+    public bool SessionCompleted => sessionCompleted;
+    public string CurrentStudentId => currentStudentId;
+    public string CurrentSessionId => currentSessionId;
+    public string SessionStartLocal => sessionStartLocal;
+    public string SessionStartUtc => sessionStartUtc;
+    public double ElapsedSessionSeconds => sessionActive
+        ? Math.Max(0.0, (DateTimeOffset.UtcNow - sessionStartUtcValue).TotalSeconds)
+        : sessionCompleted ? finalSessionSeconds : 0.0;
 
     private void Start()
     {
+        if (researchDataLogger == null)
+            researchDataLogger = C2_ResearchDataLogger.Instance;
         PrepareLoginUI();
     }
-
-
-    // =========================================================
-    // PREPARE LOGIN UI
-    // =========================================================
 
     private void PrepareLoginUI()
     {
         if (studentIdInputField != null)
         {
-            studentIdInputField.text =
-                "";
+            studentIdInputField.contentType = InputField.ContentType.Standard;
+            studentIdInputField.lineType = InputField.LineType.SingleLine;
+            studentIdInputField.characterLimit = 50;
+            studentIdInputField.readOnly = false;
+            studentIdInputField.text = "";
         }
-
-
         ClearLoginError();
-
-
-        // D1 deliberately disabled this button.
-        // D2 now enables it because real validation exists.
-
-        if (loginContinueButton != null)
-        {
-            loginContinueButton.interactable =
-                true;
-        }
+        if (loginContinueButton != null) loginContinueButton.interactable = true;
     }
-
-
-    // =========================================================
-    // LOGIN STUDENT
-    // =========================================================
 
     public void LoginStudent()
     {
-        // -----------------------------------------------------
-        // REFERENCE CHECK
-        // -----------------------------------------------------
-
-        if (studentIdInputField == null)
+        if (studentIdInputField == null || uiManager == null)
         {
-            Debug.LogError(
-                "C2 Research: Student ID InputField reference is missing."
-            );
-
+            Debug.LogError("C2 Login: InputField or UI Manager not assigned.");
+            return;
+        }
+        if (researchDataLogger == null)
+            researchDataLogger = C2_ResearchDataLogger.Instance;
+        if (researchDataLogger == null)
+        {
+            ShowLoginError("Research logger is missing. Contact the researcher.");
+            Debug.LogError("C2 Login: ResearchDataLogger not found.");
             return;
         }
 
-
-        if (uiManager == null)
+        string enteredName = NormalizeName(studentIdInputField.text);
+        studentIdInputField.text = enteredName;
+        if (string.IsNullOrEmpty(enteredName))
         {
-            Debug.LogError(
-                "C2 Research: C2_AppUIManager reference is missing."
-            );
-
+            ShowLoginError("Please enter your name to continue.");
             return;
         }
-
-
-        // -----------------------------------------------------
-        // READ INPUT
-        // -----------------------------------------------------
-
-        string rawStudentId =
-            studentIdInputField.text;
-
-
-        string normalizedStudentId =
-            NormalizeStudentId(
-                rawStudentId
-            );
-
-
-        // Show the cleaned value back to the user.
-
-        studentIdInputField.text =
-            normalizedStudentId;
-
-
-        // -----------------------------------------------------
-        // VALIDATE
-        // -----------------------------------------------------
-
-        if (
-            !IsValidStudentId(
-                normalizedStudentId
-            )
-        )
-        {
-            ShowLoginError(
-                "Invalid Student ID. Use the format ST0001."
-            );
-
-
-            Debug.LogWarning(
-                "C2 Research: Invalid Student ID entered."
-            );
-
-
-            return;
-        }
-
-
-        // -----------------------------------------------------
-        // PREVENT A SECOND SESSION FROM BEING CREATED
-        // ACCIDENTALLY WHILE ONE IS ALREADY ACTIVE
-        // -----------------------------------------------------
-
         if (sessionActive)
         {
-            Debug.LogWarning(
-                "C2 Research: A student session is already active. " +
-                "Continuing the existing session."
-            );
-
-
+            // Preserve the active student's data if the login panel reappears.
+            if (!string.Equals(enteredName, currentStudentId, StringComparison.Ordinal))
+            {
+                ShowLoginError("Finish the current session before changing users.");
+                return;
+            }
             ClearLoginError();
-
-
             uiManager.ShowScanPanel();
-
-
+            return;
+        }
+        if (sessionCompleted)
+        {
+            ShowLoginError("Use NEXT STUDENT before starting another session.");
             return;
         }
 
+        DateTimeOffset localNow = DateTimeOffset.Now;
+        sessionStartUtcValue = DateTimeOffset.UtcNow;
+        currentStudentId = enteredName;
+        currentSessionId = "SESSION_" +
+            localNow.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + "_" +
+            Guid.NewGuid().ToString("N").Substring(0, 8).ToUpperInvariant();
+        sessionStartLocal = localNow.ToString(
+            "yyyy-MM-ddTHH:mm:ss.fffzzz", CultureInfo.InvariantCulture);
+        sessionStartUtc = sessionStartUtcValue.ToString(
+            "yyyy-MM-ddTHH:mm:ss.fffZ", CultureInfo.InvariantCulture);
+        finalSessionSeconds = 0;
 
-        // -----------------------------------------------------
-        // START SESSION
-        // -----------------------------------------------------
-
-        StartNewSession(
-            normalizedStudentId
-        );
-
-
-        // -----------------------------------------------------
-        // MOVE TO AR SCANNING
-        // -----------------------------------------------------
-
+        if (!researchDataLogger.BeginSession(currentStudentId, currentSessionId,
+            sessionStartLocal, sessionStartUtc))
+        {
+            ResetSessionState();
+            ShowLoginError("Research files could not be opened. Contact the researcher.");
+            return;
+        }
+        sessionActive = true;
+        researchDataLogger.LogEvent("LOGIN_SUCCESS", result: "Success",
+            notes: "Name accepted.");
         ClearLoginError();
-
-
+        // If the D4 UI Manager is present it records SCAN_STARTED here.
         uiManager.ShowScanPanel();
     }
 
-
-    // =========================================================
-    // NORMALIZE STUDENT ID
-    // =========================================================
-
-    private string NormalizeStudentId(
-        string value
-    )
+    public void EndCurrentSession()
     {
-        if (
-            string.IsNullOrWhiteSpace(
-                value
-            )
-        )
+        if (!sessionActive || sessionCompleted) return;
+        if (researchDataLogger == null) return;
+        // These optional UI hooks work with the original D5 UI Manager;
+        // they do not cause compilation failures in earlier integrations.
+        if (uiManager != null)
+            uiManager.SendMessage("PrepareForSessionEnd", SendMessageOptions.DontRequireReceiver);
+
+        double duration = Math.Max(0,
+            (DateTimeOffset.UtcNow - sessionStartUtcValue).TotalSeconds);
+        bool saved = researchDataLogger.EndSession(
+            sessionStartLocal, sessionStartUtc, "CompletedByResearcher");
+        if (!saved)
         {
-            return "";
+            Debug.LogError("C2 Research: End Session failed. Do not clear this user yet.");
+            return;
         }
-
-
-        return
-            value
-                .Trim()
-                .ToUpperInvariant();
-    }
-
-
-    // =========================================================
-    // VALIDATE STUDENT ID
-    // =========================================================
-
-    private bool IsValidStudentId(
-        string studentId
-    )
-    {
-        if (
-            string.IsNullOrEmpty(
-                studentId
-            )
-        )
+        finalSessionSeconds = duration;
+        sessionActive = false;
+        sessionCompleted = true;
+        if (uiManager != null)
         {
-            return false;
-        }
-
-
-        return
-            StudentIdPattern.IsMatch(
-                studentId
-            );
-    }
-
-
-    // =========================================================
-    // START NEW SESSION
-    // =========================================================
-
-    private void StartNewSession(
-        string studentId
-    )
-    {
-        DateTimeOffset localNow =
-            DateTimeOffset.Now;
-
-
-        DateTimeOffset utcNow =
-            DateTimeOffset.UtcNow;
-
-
-        sessionStartUtcValue =
-            utcNow;
-
-
-        currentStudentId =
-            studentId;
-
-
-        currentSessionId =
-            GenerateSessionId(
-                studentId,
-                localNow
-            );
-
-
-        sessionStartLocal =
-            localNow.ToString(
-                "yyyy-MM-ddTHH:mm:ss.fffzzz",
-                CultureInfo.InvariantCulture
-            );
-
-
-        sessionStartUtc =
-            utcNow.ToString(
-                "yyyy-MM-ddTHH:mm:ss.fffZ",
-                CultureInfo.InvariantCulture
-            );
-
-
-        sessionActive =
-            true;
-
-
-        Debug.Log(
-            "C2 Research: Student session started." +
-            "\nStudent ID: " +
-            currentStudentId +
-            "\nSession ID: " +
-            currentSessionId +
-            "\nLocal Start: " +
-            sessionStartLocal +
-            "\nUTC Start: " +
-            sessionStartUtc
-        );
-    }
-
-
-    // =========================================================
-    // GENERATE UNIQUE SESSION ID
-    // =========================================================
-
-    private string GenerateSessionId(
-        string studentId,
-        DateTimeOffset localTime
-    )
-    {
-        string dateTimePart =
-            localTime.ToString(
-                "yyyyMMdd_HHmmss",
-                CultureInfo.InvariantCulture
-            );
-
-
-        string uniquePart =
-            Guid.NewGuid()
-                .ToString("N")
-                .Substring(0, 4)
-                .ToUpperInvariant();
-
-
-        return
-            studentId +
-            "_" +
-            dateTimePart +
-            "_" +
-            uniquePart;
-    }
-
-
-    // =========================================================
-    // LOGIN ERROR
-    // =========================================================
-
-    private void ShowLoginError(
-        string message
-    )
-    {
-        if (loginErrorText != null)
-        {
-            loginErrorText.text =
-                message;
+            uiManager.SendMessage("SetExportTitleText", "SESSION COMPLETE",
+                SendMessageOptions.DontRequireReceiver);
+            uiManager.SendMessage("SetExportSummaryText", BuildSessionSummary(),
+                SendMessageOptions.DontRequireReceiver);
+            uiManager.SendMessage("SetExportStatusText",
+                "Data saved inside the app. Use SAVE CSV FILES to export.",
+                SendMessageOptions.DontRequireReceiver);
+            uiManager.SendMessage("ShowExportPanel", SendMessageOptions.DontRequireReceiver);
         }
     }
 
+    public void PrepareNextStudent()
+    {
+        if (sessionActive || !sessionCompleted) return;
+        if (placementManagerObject != null)
+            placementManagerObject.SendMessage(
+                "ResetPlacement", SendMessageOptions.DontRequireReceiver);
+        ResetSessionState();
+        PrepareLoginUI();
+        if (uiManager != null)
+        {
+            uiManager.SendMessage("PrepareUIForNextStudent",
+                SendMessageOptions.DontRequireReceiver);
+            // Earlier UI Managers may not have PrepareUIForNextStudent.
+            // ShowLoginPanel is safe to call again in D5.
+            uiManager.SendMessage("ShowLoginPanel", SendMessageOptions.DontRequireReceiver);
+        }
+    }
+
+    private string BuildSessionSummary()
+    {
+        int sec = Mathf.Max(0, Mathf.RoundToInt((float)finalSessionSeconds));
+        return "Name: " + currentStudentId + "\n" +
+               "Session Time: " + (sec / 60).ToString("00") + ":" +
+               (sec % 60).ToString("00") + "\n\n" +
+               "Shape Selections: " + researchDataLogger.ShapeSelectionCount + "\n" +
+               "Fraction Checks: " + researchDataLogger.FractionSelectionCount + "\n" +
+               "Trace Attempts: " + researchDataLogger.TraceAttemptCount + "\n" +
+               "Successful Traces: " + researchDataLogger.SuccessfulTraceCount + "\n" +
+               "Successful Slices: " + researchDataLogger.SuccessfulSliceCount;
+    }
+
+    private static string NormalizeName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "";
+        string result = value.Replace("\r", " ").Replace("\n", " ").Trim();
+        return result.Length > 50 ? result.Substring(0, 50) : result;
+    }
+
+    private void ResetSessionState()
+    {
+        sessionActive = false;
+        sessionCompleted = false;
+        currentStudentId = currentSessionId = "";
+        sessionStartLocal = sessionStartUtc = "";
+        finalSessionSeconds = 0;
+        sessionStartUtcValue = default(DateTimeOffset);
+    }
+
+    private void ShowLoginError(string value)
+    {
+        if (loginErrorText != null) loginErrorText.text = value;
+    }
 
     private void ClearLoginError()
     {
-        if (loginErrorText != null)
-        {
-            loginErrorText.text =
-                "";
-        }
+        if (loginErrorText != null) loginErrorText.text = "";
     }
 }
