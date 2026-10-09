@@ -488,15 +488,62 @@ public class TetrahedronGridDrawManager :
         if (!isDrawing)
             return;
 
-        currentDragPoint =
+        Vector2Int nearestPoint =
             ScreenToNearestGridPoint(
                 eventData
             );
 
-        ShowPreview(
-            dragStartPoint,
-            currentDragPoint
-        );
+        currentDragPoint =
+            nearestPoint;
+
+        // Still inside the same grid point area.
+        if (currentDragPoint == dragStartPoint)
+        {
+            RemovePreview();
+            return;
+        }
+
+        // ----------------------------------------------
+        // CONTINUOUS EDGE DRAWING
+        // ----------------------------------------------
+
+        /*
+         * As soon as the finger reaches a neighbouring
+         * triangular-grid point, complete that edge
+         * immediately and continue drawing from there.
+         */
+
+        if (AreNeighbourGridPoints(
+                dragStartPoint,
+                currentDragPoint))
+        {
+            RemovePreview();
+
+            AddSnappedEdge(
+                dragStartPoint,
+                currentDragPoint
+            );
+
+            /*
+             * IMPORTANT:
+             * The end of this edge becomes the start
+             * of the next edge without releasing finger.
+             */
+
+            dragStartPoint =
+                currentDragPoint;
+
+            UpdateUndoButton();
+
+            UpdateStatusText();
+
+            return;
+        }
+
+        // If the finger is not currently over a valid
+        // neighbouring point, do not create a long
+        // invalid edge.
+        RemovePreview();
     }
 
 
@@ -516,10 +563,22 @@ public class TetrahedronGridDrawManager :
 
         RemovePreview();
 
-        AddSnappedEdge(
-            dragStartPoint,
-            currentDragPoint
-        );
+        /*
+         * If the finger was released directly on
+         * another neighbouring point before OnDrag
+         * committed it, add that final edge here.
+         */
+
+        if (currentDragPoint != dragStartPoint &&
+            AreNeighbourGridPoints(
+                dragStartPoint,
+                currentDragPoint))
+        {
+            AddSnappedEdge(
+                dragStartPoint,
+                currentDragPoint
+            );
+        }
 
         UpdateUndoButton();
 
