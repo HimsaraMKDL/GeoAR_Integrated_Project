@@ -21,7 +21,7 @@ public class StudentProfileManager : MonoBehaviour
 
     [Header("Settings")]
     [SerializeField]
-    private int maxStudents = 50;
+    private int maxStudents = 200;
 
 
     private string dataFolder;

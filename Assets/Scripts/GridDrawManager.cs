@@ -30,8 +30,8 @@ public class GridDrawManager : MonoBehaviour, IPointerDownHandler, IDragHandler,
     public Button clearButton;
 
     [Header("Grid Settings")]
-    public int gridWidth = 12;
-    public int gridHeight = 12;
+    public int gridWidth = 6;
+    public int gridHeight = 6;
 
     [Header("Line Settings")]
     public float gridLineThickness = 3f;
