@@ -1836,7 +1836,7 @@ MonoBehaviour:
   minimumDragRatio: 0.45
   allowReverseTrace: 1
   autoPrepareVerticalHalfForTesting: 0
-  blockTouchesOverUI: 1
+  blockTouchesOverUI: 0
   showDebugStatus: 0
 --- !u!1 &4471224551400271179
 GameObject:

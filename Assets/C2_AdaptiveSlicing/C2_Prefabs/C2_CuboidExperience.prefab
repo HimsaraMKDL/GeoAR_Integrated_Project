@@ -1547,7 +1547,7 @@ MonoBehaviour:
   allowReverseTrace: 1
   autoPrepareVerticalHalfForTesting: 0
   enableMouseTestingInEditor: 1
-  blockTouchesOverUI: 1
+  blockTouchesOverUI: 0
   showDebugStatus: 0
 --- !u!1 &3461100422165323389
 GameObject:
