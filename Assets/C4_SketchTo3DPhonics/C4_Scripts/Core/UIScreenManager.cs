@@ -1,5 +1,5 @@
-
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class UIScreenManager : MonoBehaviour
 {
@@ -49,5 +49,10 @@ public class UIScreenManager : MonoBehaviour
 
         if (wordValidationCanvas != null)
             wordValidationCanvas.SetActive(true);
+    }
+
+    public void GoToMainMenu()
+    {
+        SceneManager.LoadScene("MainMenu");
     }
 }
