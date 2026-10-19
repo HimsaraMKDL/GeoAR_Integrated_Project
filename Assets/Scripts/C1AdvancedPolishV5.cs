@@ -9,13 +9,13 @@ using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
 /// <summary>
-/// V6 additive polish layer for the C1 Geometry component.
+/// V7 additive polish layer for the C1 Geometry component.
 ///
 /// This file is intentionally separate from the working V4 guidance system.
 /// It adds extra presentation / UX features at runtime without editing the
 /// integrated SampleScene or changing any validator, folding, AR or logger logic.
 ///
-/// V5 + V6 features:
+/// V5 + V6 + V7 features:
 ///  1. soft screen transitions between menu/workspace/fold/AR states
 ///  2. fold-stage solid camera background + subtle gradient backdrop (all five shapes)
 ///  3. fold-complete celebration card
@@ -26,6 +26,10 @@ using UnityEngine.XR.ARSubsystems;
 ///  8. per-student completion badges on shape menu buttons
 ///  9. invalid-attempt drawing-area warning pulse
 /// 10. small accessibility polish / expanded hit areas for undersized key buttons
+/// 11. persistent side facts panel after the temporary shape-fact card closes
+/// 12. V8 top-aligned persistent facts placement below the progress indicator
+/// 13. V9 keeps the wide top Shape Facts card visible for the completed shape
+///     and removes the compact right-side facts card.
 ///
 /// The system only runs in SampleScene.
 /// </summary>
@@ -79,6 +83,16 @@ public class C1AdvancedPolishV5 : MonoBehaviour
     private Text factsTitle;
     private Text factsText;
     private Coroutine factsRoutine;
+
+    // V7: once the temporary facts card has finished, keep the same learning
+    // information available as a compact side panel for the rest of the
+    // completed-shape session. It is display-only and never blocks touches.
+    private GameObject persistentFactsRoot;
+    private CanvasGroup persistentFactsGroup;
+    private Text persistentFactsTitle;
+    private Text persistentFactsText;
+    private Coroutine persistentFactsRoutine;
+    private string persistentFactsShape = string.Empty;
 
     private GameObject reticleRoot;
     private RectTransform reticleSpinner;
@@ -207,6 +221,7 @@ public class C1AdvancedPolishV5 : MonoBehaviour
         arPlacedModelManager = null;
 
         currentShape = string.Empty;
+        persistentFactsShape = string.Empty;
         previousViewKey = string.Empty;
         previousARVisible = false;
         previousGoToARVisible = false;
@@ -337,8 +352,22 @@ public class C1AdvancedPolishV5 : MonoBehaviour
         bool arVisible = IsVisible(arOverlayCanvas);
         string detectedShape = DetectActiveShape();
 
+        if (studentEntryVisible || menuVisible)
+        {
+            HidePersistentFactsImmediate();
+            HideFactsImmediate();
+        }
+
         if (!string.IsNullOrEmpty(detectedShape))
+        {
+            if (!string.IsNullOrEmpty(currentShape) && detectedShape != currentShape)
+            {
+                HidePersistentFactsImmediate();
+                HideFactsImmediate();
+            }
+
             currentShape = detectedShape;
+        }
 
         string viewKey = GetViewKey(studentEntryVisible, menuVisible, arVisible);
         if (!string.IsNullOrEmpty(previousViewKey) && viewKey != previousViewKey)
@@ -743,13 +772,19 @@ public class C1AdvancedPolishV5 : MonoBehaviour
 
     private void ShowFactsCard(string shape, float duration)
     {
+        // V9: keep the original wide top facts card instead of replacing it
+        // with the compact right-side panel. The duration parameter is kept
+        // for compatibility with the existing calls, but the card now stays
+        // visible until the learner leaves the shape / returns to the menu.
+        HidePersistentFactsImmediate();
+
         if (factsRoutine != null)
             StopCoroutine(factsRoutine);
 
-        factsRoutine = StartCoroutine(FactsRoutine(shape, duration));
+        factsRoutine = StartCoroutine(FactsRoutine(shape));
     }
 
-    private IEnumerator FactsRoutine(string shape, float duration)
+    private IEnumerator FactsRoutine(string shape)
     {
         if (string.IsNullOrEmpty(shape))
             yield break;
@@ -757,6 +792,7 @@ public class C1AdvancedPolishV5 : MonoBehaviour
         factsTitle.text = shape + " FACT";
         factsText.text = GetShapeFact(shape);
         factsRoot.SetActive(true);
+        factsRoot.transform.SetAsLastSibling();
         factsGroup.alpha = 0f;
 
         float t = 0f;
@@ -767,18 +803,77 @@ public class C1AdvancedPolishV5 : MonoBehaviour
             yield return null;
         }
 
-        yield return new WaitForSecondsRealtime(duration);
+        factsGroup.alpha = 1f;
+        factsRoutine = null;
+    }
 
-        t = 0f;
+    private void HideFactsImmediate()
+    {
+        if (factsRoutine != null)
+        {
+            StopCoroutine(factsRoutine);
+            factsRoutine = null;
+        }
+
+        if (factsRoot != null)
+            factsRoot.SetActive(false);
+    }
+
+    private void ShowPersistentFacts(string shape)
+    {
+        if (string.IsNullOrEmpty(shape) || persistentFactsRoot == null || persistentFactsGroup == null)
+            return;
+
+        persistentFactsShape = shape;
+        persistentFactsTitle.text = shape.ToUpperInvariant();
+        persistentFactsText.text = GetShapeFact(shape).Replace(" • ", "\n");
+
+        if (persistentFactsRoutine != null)
+            StopCoroutine(persistentFactsRoutine);
+
+        persistentFactsRoutine = StartCoroutine(PersistentFactsFadeInRoutine());
+    }
+
+    private IEnumerator PersistentFactsFadeInRoutine()
+    {
+        persistentFactsRoot.SetActive(true);
+        persistentFactsRoot.transform.SetAsLastSibling();
+        persistentFactsGroup.alpha = 0f;
+
+        RectTransform rect = persistentFactsRoot.GetComponent<RectTransform>();
+        // V8: keep the persistent facts card high on the screen, directly
+        // below the BUILD -> VALIDATE -> FOLD -> AR progress indicator.
+        Vector2 finalPosition = new Vector2(-190f, -420f);
+        Vector2 startPosition = finalPosition + new Vector2(34f, 0f);
+        rect.anchoredPosition = startPosition;
+
+        float t = 0f;
         while (t < 1f)
         {
-            t += Time.unscaledDeltaTime / 0.25f;
-            factsGroup.alpha = 1f - Mathf.Clamp01(t);
+            t += Time.unscaledDeltaTime / 0.28f;
+            float eased = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
+            persistentFactsGroup.alpha = eased;
+            rect.anchoredPosition = Vector2.Lerp(startPosition, finalPosition, eased);
             yield return null;
         }
 
-        factsRoot.SetActive(false);
-        factsRoutine = null;
+        persistentFactsGroup.alpha = 1f;
+        rect.anchoredPosition = finalPosition;
+        persistentFactsRoutine = null;
+    }
+
+    private void HidePersistentFactsImmediate()
+    {
+        persistentFactsShape = string.Empty;
+
+        if (persistentFactsRoutine != null)
+        {
+            StopCoroutine(persistentFactsRoutine);
+            persistentFactsRoutine = null;
+        }
+
+        if (persistentFactsRoot != null)
+            persistentFactsRoot.SetActive(false);
     }
 
     private string GetShapeFact(string shape)
@@ -1243,6 +1338,8 @@ public class C1AdvancedPolishV5 : MonoBehaviour
 
         BuildCelebrationUI(canvasObject.transform);
         BuildFactsUI(canvasObject.transform);
+        // V9: the wide top facts card is now persistent, so the old compact
+        // right-side facts panel is intentionally not created.
         BuildReticleUI(canvasObject.transform);
         BuildPlacementUI(canvasObject.transform);
         BuildIdleHintUI(canvasObject.transform);
@@ -1293,8 +1390,9 @@ public class C1AdvancedPolishV5 : MonoBehaviour
 
     private void BuildFactsUI(Transform parent)
     {
+        // V9: persistent wide learning card directly below the progress bar.
         factsRoot = CreatePanel("C1V5FactsCard", parent,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -370f), new Vector2(760f, 130f),
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -330f), new Vector2(760f, 130f),
             new Color(0.06f, 0.12f, 0.25f, 0.94f), roundedSprite);
         factsRoot.GetComponent<Image>().raycastTarget = false;
         AddShadow(factsRoot, new Color(0f, 0f, 0f, 0.22f), new Vector2(0f, -5f));
@@ -1308,6 +1406,44 @@ public class C1AdvancedPolishV5 : MonoBehaviour
         factsText = CreateText("FactText", factsRoot.transform, 25, TextAnchor.MiddleLeft, Color.white);
         SetRect(factsText.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(445f, -22f), new Vector2(650f, 70f));
         factsRoot.SetActive(false);
+    }
+
+    private void BuildPersistentFactsUI(Transform parent)
+    {
+        // Compact right-side reference card. V8 anchors it near the top-right,
+        // directly below the progress indicator, while keeping it translucent
+        // so it does not compete with the 3D model or AR view.
+        persistentFactsRoot = CreatePanel("C1V7PersistentFacts", parent,
+            new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-190f, -420f), new Vector2(330f, 230f),
+            new Color(0.045f, 0.11f, 0.22f, 0.86f), roundedSprite);
+        persistentFactsRoot.GetComponent<Image>().raycastTarget = false;
+        AddShadow(persistentFactsRoot, new Color(0f, 0f, 0f, 0.24f), new Vector2(-4f, -5f));
+        persistentFactsGroup = persistentFactsRoot.AddComponent<CanvasGroup>();
+        persistentFactsGroup.blocksRaycasts = false;
+        persistentFactsGroup.interactable = false;
+
+        GameObject accent = CreatePanel("Accent", persistentFactsRoot.transform,
+            new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -7f), new Vector2(-34f, 10f),
+            new Color(0.24f, 0.68f, 1f, 0.96f), roundedSprite);
+        RectTransform accentRect = accent.GetComponent<RectTransform>();
+        accentRect.offsetMin = new Vector2(18f, -12f);
+        accentRect.offsetMax = new Vector2(-18f, -2f);
+        accent.GetComponent<Image>().raycastTarget = false;
+
+        Text label = CreateText("LearnLabel", persistentFactsRoot.transform, 17, TextAnchor.MiddleLeft, new Color(0.44f, 0.82f, 1f, 1f));
+        label.fontStyle = FontStyle.Bold;
+        label.text = "SHAPE FACTS";
+        SetRect(label.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(92f, -43f), new Vector2(165f, 34f));
+
+        persistentFactsTitle = CreateText("ShapeTitle", persistentFactsRoot.transform, 27, TextAnchor.MiddleLeft, Color.white);
+        persistentFactsTitle.fontStyle = FontStyle.Bold;
+        SetRect(persistentFactsTitle.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(165f, -82f), new Vector2(290f, 46f));
+
+        persistentFactsText = CreateText("Facts", persistentFactsRoot.transform, 21, TextAnchor.UpperLeft, new Color(0.88f, 0.94f, 1f, 1f));
+        persistentFactsText.lineSpacing = 1.05f;
+        SetRect(persistentFactsText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(165f, -155f), new Vector2(290f, 115f));
+
+        persistentFactsRoot.SetActive(false);
     }
 
     private void BuildReticleUI(Transform parent)
@@ -1566,6 +1702,8 @@ public class C1AdvancedPolishV5 : MonoBehaviour
             celebrationRoot.SetActive(false);
         if (factsRoot != null)
             factsRoot.SetActive(false);
+        if (persistentFactsRoot != null)
+            persistentFactsRoot.SetActive(false);
         if (reticleRoot != null)
             reticleRoot.SetActive(false);
         if (placementRoot != null)

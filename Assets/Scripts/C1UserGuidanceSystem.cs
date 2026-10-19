@@ -19,6 +19,7 @@ using UnityEngine.EventSystems;
 ///  - contextual toast messages for validation, folding and AR placement
 ///  - V4 animated blue/cyan/purple button glow for the learner's next action
 ///  - gentle press-and-release bounce feedback on guided action buttons
+///  - V8 image-like onboarding illustrations for primary learners
 ///
 /// The system runs only in SampleScene and does not change C2/C3/C4 scenes.
 /// </summary>
@@ -74,6 +75,11 @@ public class C1UserGuidanceSystem : MonoBehaviour
     private readonly Dictionary<Button, C1AnimatedButtonGlow> buttonGlowEffects = new Dictionary<Button, C1AnimatedButtonGlow>();
     private Text guideBadgeText;
     private Text guideIconText;
+    // V8: small code-generated visual illustrations for the four onboarding steps.
+    // These are built from Unity UI primitives, so no extra image assets or
+    // Inspector wiring are required in the integrated project.
+    private GameObject onboardingIllustrationRoot;
+    private GameObject[] onboardingIllustrations = new GameObject[4];
     private readonly List<Text> legacyStatusTexts = new List<Text>();
     private Coroutine validationFeedbackRoutine;
 
@@ -838,7 +844,11 @@ public class C1UserGuidanceSystem : MonoBehaviour
             guideIconText.text = GetOnboardingIcon(guideIndex);
             guideTitleText.text = onboardingTitles[guideIndex];
             guideBodyText.text = onboardingBodies[guideIndex];
+            guideBodyText.fontSize = 30;
+            SetRect(guideBodyText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -132f), new Vector2(720f, 182f));
             guidePageText.text = BuildPageDots(guideIndex, onboardingTitles.Length);
+            SetOnboardingIllustration(guideIndex, true);
             guideLeftButton.gameObject.SetActive(true);
             guideLeftButtonText.text = "SKIP";
             guideRightButtonText.text = guideIndex == onboardingTitles.Length - 1 ? "LET'S START" : "NEXT";
@@ -849,8 +859,12 @@ public class C1UserGuidanceSystem : MonoBehaviour
         {
             guideBadgeText.text = "QUICK HELP";
             guideIconText.text = GetShapeIcon(coachShape);
+            SetOnboardingIllustration(0, false);
             guideTitleText.text = coachShape + " Guide";
             guideBodyText.text = GetCoachText(coachShape);
+            guideBodyText.fontSize = 34;
+            SetRect(guideBodyText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -20f), new Vector2(720f, 340f));
             guidePageText.text = "Tap HELP anytime to view this again";
             guideLeftButton.gameObject.SetActive(false);
             guideRightButtonText.text = "GOT IT";
@@ -882,6 +896,160 @@ public class C1UserGuidanceSystem : MonoBehaviour
             case 2: return "✓";
             case 3: return "AR";
             default: return "?";
+        }
+    }
+
+
+    // V8 onboarding illustrations -------------------------------------------------
+    // Built entirely from UI primitives so this patch remains self-contained.
+    private void BuildOnboardingIllustrations(Transform parent)
+    {
+        onboardingIllustrationRoot = CreatePanel("OnboardingVisualRoot", parent,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 10f), new Vector2(680f, 170f),
+            new Color(0.94f, 0.97f, 1f, 1f));
+        ApplyRounded(onboardingIllustrationRoot.GetComponent<Image>());
+        onboardingIllustrationRoot.GetComponent<Image>().raycastTarget = false;
+
+        // Step 1: choose a shape -> 2D to 3D discovery.
+        GameObject step1 = CreateVisualStepRoot("Step1Visual", onboardingIllustrationRoot.transform);
+        CreateMiniTile(step1.transform, new Vector2(-205f, 0f), "□", "CUBE", new Color(0.22f, 0.53f, 0.96f, 1f));
+        CreateMiniTile(step1.transform, new Vector2(0f, 0f), "△", "PRISM", new Color(0.40f, 0.42f, 0.96f, 1f));
+        CreateMiniTile(step1.transform, new Vector2(205f, 0f), "○", "CYLINDER", new Color(0.16f, 0.68f, 0.78f, 1f));
+        onboardingIllustrations[0] = step1;
+
+        // Step 2: a simple connected six-square net with a finger/path cue.
+        GameObject step2 = CreateVisualStepRoot("Step2Visual", onboardingIllustrationRoot.transform);
+        Vector2[] netCells =
+        {
+            new Vector2(-52f, 0f), new Vector2(0f, 0f), new Vector2(52f, 0f), new Vector2(104f, 0f),
+            new Vector2(0f, 52f), new Vector2(0f, -52f)
+        };
+        for (int i = 0; i < netCells.Length; i++)
+            CreateVisualSquare(step2.transform, netCells[i] + new Vector2(-70f, 0f), 44f, new Color(0.82f, 0.90f, 1f, 1f));
+        Text drawArrow = CreateText("DrawCue", step2.transform, 34, TextAnchor.MiddleCenter, new Color(0.18f, 0.45f, 0.86f, 1f));
+        drawArrow.text = "DRAW  →";
+        drawArrow.fontStyle = FontStyle.Bold;
+        SetRect(drawArrow.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(215f, 0f), new Vector2(220f, 70f));
+        onboardingIllustrations[1] = step2;
+
+        // Step 3: net + large validation check.
+        GameObject step3 = CreateVisualStepRoot("Step3Visual", onboardingIllustrationRoot.transform);
+        for (int i = 0; i < netCells.Length; i++)
+            CreateVisualSquare(step3.transform, netCells[i] + new Vector2(-125f, 0f), 39f, new Color(0.86f, 0.92f, 1f, 1f));
+        GameObject checkBadge = CreatePanel("CheckBadge", step3.transform,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(180f, 0f), new Vector2(150f, 92f),
+            new Color(0.20f, 0.70f, 0.43f, 1f));
+        ApplyRounded(checkBadge.GetComponent<Image>());
+        checkBadge.GetComponent<Image>().raycastTarget = false;
+        Text checkText = CreateText("CheckText", checkBadge.transform, 36, TextAnchor.MiddleCenter, Color.white);
+        checkText.text = "✓  VALID";
+        checkText.fontStyle = FontStyle.Bold;
+        SetStretch(checkText.rectTransform, 8f, 6f, 8f, 6f);
+        onboardingIllustrations[2] = step3;
+
+        // Step 4: 2D net -> 3D -> AR phone. This is intentionally pictorial
+        // rather than text-heavy so younger students can understand the flow.
+        GameObject step4 = CreateVisualStepRoot("Step4Visual", onboardingIllustrationRoot.transform);
+        GameObject netBadge = CreatePanel("NetBadge", step4.transform,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-220f, 0f), new Vector2(126f, 92f),
+            new Color(0.83f, 0.90f, 1f, 1f));
+        ApplyRounded(netBadge.GetComponent<Image>());
+        netBadge.GetComponent<Image>().raycastTarget = false;
+        Text netText = CreateText("NetText", netBadge.transform, 27, TextAnchor.MiddleCenter, new Color(0.12f, 0.36f, 0.72f, 1f));
+        netText.text = "2D NET";
+        netText.fontStyle = FontStyle.Bold;
+        SetStretch(netText.rectTransform, 6f, 6f, 6f, 6f);
+
+        CreateFlowArrow(step4.transform, new Vector2(-115f, 0f));
+
+        GameObject solidBadge = CreatePanel("SolidBadge", step4.transform,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 0f), new Vector2(126f, 92f),
+            new Color(0.44f, 0.43f, 0.96f, 1f));
+        ApplyRounded(solidBadge.GetComponent<Image>());
+        solidBadge.GetComponent<Image>().raycastTarget = false;
+        Text solidText = CreateText("SolidText", solidBadge.transform, 29, TextAnchor.MiddleCenter, Color.white);
+        solidText.text = "3D";
+        solidText.fontStyle = FontStyle.Bold;
+        SetStretch(solidText.rectTransform, 6f, 6f, 6f, 6f);
+
+        CreateFlowArrow(step4.transform, new Vector2(115f, 0f));
+
+        GameObject phone = CreatePanel("Phone", step4.transform,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(225f, 0f), new Vector2(112f, 130f),
+            new Color(0.10f, 0.18f, 0.31f, 1f));
+        ApplyRounded(phone.GetComponent<Image>());
+        phone.GetComponent<Image>().raycastTarget = false;
+        GameObject phoneScreen = CreatePanel("PhoneScreen", phone.transform,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 5f), new Vector2(82f, 92f),
+            new Color(0.74f, 0.91f, 1f, 1f));
+        ApplyRounded(phoneScreen.GetComponent<Image>());
+        phoneScreen.GetComponent<Image>().raycastTarget = false;
+        Text arText = CreateText("ARText", phoneScreen.transform, 27, TextAnchor.MiddleCenter, new Color(0.10f, 0.42f, 0.73f, 1f));
+        arText.text = "AR";
+        arText.fontStyle = FontStyle.Bold;
+        SetStretch(arText.rectTransform, 4f, 4f, 4f, 4f);
+        onboardingIllustrations[3] = step4;
+
+        SetOnboardingIllustration(0, false);
+    }
+
+    private GameObject CreateVisualStepRoot(string name, Transform parent)
+    {
+        GameObject root = new GameObject(name);
+        root.layer = 5;
+        root.transform.SetParent(parent, false);
+        RectTransform rect = root.AddComponent<RectTransform>();
+        SetStretch(rect, 8f, 8f, 8f, 8f);
+        root.SetActive(false);
+        return root;
+    }
+
+    private void CreateMiniTile(Transform parent, Vector2 position, string symbol, string label, Color accentColor)
+    {
+        GameObject tile = CreatePanel("ShapeTile_" + label, parent,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), position, new Vector2(170f, 122f),
+            Color.white);
+        ApplyRounded(tile.GetComponent<Image>());
+        tile.GetComponent<Image>().raycastTarget = false;
+
+        Text symbolText = CreateText("Symbol", tile.transform, 38, TextAnchor.MiddleCenter, accentColor);
+        symbolText.text = symbol;
+        symbolText.fontStyle = FontStyle.Bold;
+        SetRect(symbolText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 18f), new Vector2(110f, 58f));
+
+        Text labelText = CreateText("Caption", tile.transform, 16, TextAnchor.MiddleCenter, new Color(0.24f, 0.34f, 0.49f, 1f));
+        labelText.text = label;
+        labelText.fontStyle = FontStyle.Bold;
+        SetRect(labelText.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 23f), new Vector2(145f, 35f));
+    }
+
+    private void CreateVisualSquare(Transform parent, Vector2 position, float size, Color fill)
+    {
+        GameObject square = CreatePanel("NetCell", parent,
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), position, new Vector2(size, size), fill);
+        ApplyRounded(square.GetComponent<Image>());
+        square.GetComponent<Image>().raycastTarget = false;
+    }
+
+    private void CreateFlowArrow(Transform parent, Vector2 position)
+    {
+        Text arrow = CreateText("FlowArrow", parent, 36, TextAnchor.MiddleCenter, new Color(0.25f, 0.49f, 0.88f, 1f));
+        arrow.text = "→";
+        arrow.fontStyle = FontStyle.Bold;
+        SetRect(arrow.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), position, new Vector2(70f, 60f));
+    }
+
+    private void SetOnboardingIllustration(int activeIndex, bool visible)
+    {
+        if (onboardingIllustrationRoot == null)
+            return;
+
+        onboardingIllustrationRoot.SetActive(visible);
+        for (int i = 0; i < onboardingIllustrations.Length; i++)
+        {
+            if (onboardingIllustrations[i] != null)
+                onboardingIllustrations[i].SetActive(visible && i == activeIndex);
         }
     }
 
@@ -1096,10 +1264,15 @@ public class C1UserGuidanceSystem : MonoBehaviour
             new Vector2(0f, -300f), new Vector2(760f, 110f));
         guideTitleText.fontStyle = FontStyle.Bold;
 
-        guideBodyText = CreateText("GuideBody", card.transform, 34, TextAnchor.MiddleCenter,
+        // V8: image-like visual panel for primary learners. The illustration
+        // sits between the title and the instruction text and changes for each
+        // of the four onboarding steps.
+        BuildOnboardingIllustrations(card.transform);
+
+        guideBodyText = CreateText("GuideBody", card.transform, 30, TextAnchor.MiddleCenter,
             new Color(0.22f, 0.28f, 0.39f, 1f));
         SetRect(guideBodyText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0f, -20f), new Vector2(720f, 340f));
+            new Vector2(0f, -132f), new Vector2(720f, 182f));
         guideBodyText.horizontalOverflow = HorizontalWrapMode.Wrap;
         guideBodyText.verticalOverflow = VerticalWrapMode.Truncate;
         guideBodyText.lineSpacing = 1.16f;
