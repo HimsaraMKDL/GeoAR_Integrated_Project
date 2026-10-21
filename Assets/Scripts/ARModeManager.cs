@@ -9,7 +9,6 @@ public class ARModeManager : MonoBehaviour
     // ==================================================
 
     [Header("Normal Mode")]
-
     public Camera normalCamera;
 
 
@@ -18,11 +17,8 @@ public class ARModeManager : MonoBehaviour
     // ==================================================
 
     [Header("AR Mode Objects")]
-
     public GameObject arSession;
-
     public GameObject xrOrigin;
-
     public GameObject arPlacedModelManager;
 
 
@@ -31,12 +27,9 @@ public class ARModeManager : MonoBehaviour
     // ==================================================
 
     [Header("Normal UI")]
-
     public GameObject drawingCanvas;
 
-
     [Header("AR Overlay UI")]
-
     [SerializeField]
     private GameObject arOverlayCanvas;
 
@@ -67,9 +60,7 @@ public class ARModeManager : MonoBehaviour
 
         if (normalCamera != null)
         {
-            normalCamera.gameObject.SetActive(
-                !active
-            );
+            normalCamera.gameObject.SetActive(!active);
         }
 
 
@@ -79,37 +70,27 @@ public class ARModeManager : MonoBehaviour
 
         if (arSession != null)
         {
-            arSession.SetActive(
-                active
-            );
+            arSession.SetActive(active);
         }
-
 
         if (xrOrigin != null)
         {
-            xrOrigin.SetActive(
-                active
-            );
+            xrOrigin.SetActive(active);
         }
-
 
         if (arPlacedModelManager != null)
         {
-            arPlacedModelManager.SetActive(
-                active
-            );
+            arPlacedModelManager.SetActive(active);
         }
 
 
         // ----------------------------------------------
-        // AR OVERLAY
+        // AR OVERLAY UI
         // ----------------------------------------------
 
         if (arOverlayCanvas != null)
         {
-            arOverlayCanvas.SetActive(
-                active
-            );
+            arOverlayCanvas.SetActive(active);
         }
     }
 
@@ -122,19 +103,12 @@ public class ARModeManager : MonoBehaviour
     {
         if (drawingCanvas != null)
         {
-            drawingCanvas.SetActive(
-                false
-            );
+            drawingCanvas.SetActive(false);
         }
 
-
-        SetARMode(
-            true
-        );
-
+        SetARMode(true);
 
         yield return null;
-
 
         Debug.Log(
             "AR camera started after 3D model creation."
@@ -167,10 +141,7 @@ public class ARModeManager : MonoBehaviour
         // WAIT FOR 3D PREVIEW
         // ----------------------------------------------
 
-        yield return
-            new WaitForSeconds(
-                delay
-            );
+        yield return new WaitForSeconds(delay);
 
 
         // ----------------------------------------------
@@ -179,9 +150,7 @@ public class ARModeManager : MonoBehaviour
 
         if (drawingCanvas != null)
         {
-            drawingCanvas.SetActive(
-                false
-            );
+            drawingCanvas.SetActive(false);
         }
 
 
@@ -189,19 +158,14 @@ public class ARModeManager : MonoBehaviour
         // START AR
         // ----------------------------------------------
 
-        SetARMode(
-            true
-        );
+        SetARMode(true);
 
 
         /*
          * Give AR system a short moment
          * to initialize.
          */
-        yield return
-            new WaitForSeconds(
-                0.5f
-            );
+        yield return new WaitForSeconds(0.5f);
 
 
         // ----------------------------------------------
@@ -212,17 +176,12 @@ public class ARModeManager : MonoBehaviour
             modelRoot != null)
         {
             ARPlacedModelManager manager =
-                arPlacedModelManager
-                    .GetComponent<
-                        ARPlacedModelManager>();
-
+                arPlacedModelManager.GetComponent<
+                    ARPlacedModelManager>();
 
             if (manager != null)
             {
-                manager.SetModelToPlace(
-                    modelRoot
-                );
-
+                manager.SetModelToPlace(modelRoot);
 
                 Debug.Log(
                     "Model ready for AR placement. " +
@@ -241,40 +200,97 @@ public class ARModeManager : MonoBehaviour
 
 
     // ==================================================
-    // RETURN HOME FROM AR
+    // SHOW MAIN MENU
     // ==================================================
 
+    /*
+     * Use this function for:
+     *
+     * ARHomeButton
+     *      On Click()
+     *          ARModeManager -> ShowMainMenu()
+     *
+     * The current scene is reloaded so every geometry
+     * activity returns to a completely clean state.
+     *
+     * After reload, GeometryMenuManager.Start()
+     * can show the Main Menu again.
+     */
+    public void ShowMainMenu()
+    {
+        Debug.Log(
+            "Show Main Menu requested from AR."
+        );
+
+        ReloadGeometryScene();
+    }
+
+
+    // ==================================================
+    // OLD RETURN HOME FUNCTION
+    // ==================================================
+
+    /*
+     * Kept for compatibility with any existing button
+     * that is already connected to ReturnHomeFromAR().
+     *
+     * Both functions now do the same thing.
+     */
     public void ReturnHomeFromAR()
     {
         Debug.Log(
-            "Returning Home from AR. " +
-            "Resetting complete geometry activity."
+            "ReturnHomeFromAR called."
         );
 
+        ShowMainMenu();
+    }
 
+
+    // ==================================================
+    // RELOAD CURRENT SCENE
+    // ==================================================
+
+    private void ReloadGeometryScene()
+    {
         /*
-         * Reloading the active scene gives us
-         * a guaranteed clean start:
+         * Reloading the active scene gives a clean start:
          *
-         * - old cube net removed
-         * - old cuboid net removed
-         * - old prism faces removed
-         * - old cylinder faces removed
-         * - generated 3D model removed
-         * - AR placement cleared
-         * - validation states cleared
-         * - depth / height selections cleared
+         * - AR mode is stopped
+         * - placed AR model is removed
+         * - generated 3D model is removed
+         * - Cube drawing is cleared
+         * - Cuboid drawing is cleared
+         * - Tetrahedron drawing is cleared
+         * - Prism faces are cleared
+         * - Cylinder faces are cleared
+         * - validation states are reset
+         * - Create 3D state is reset
+         * - AR placement state is reset
+         * - temporary UI is reset
          *
          * GeometryMenuManager.Start()
-         * then opens MainMenuPanel again.
+         * should then display MainMenuPanel.
          */
 
         Scene currentScene =
             SceneManager.GetActiveScene();
 
-
-        SceneManager.LoadScene(
-            currentScene.buildIndex
-        );
+        if (currentScene.buildIndex >= 0)
+        {
+            SceneManager.LoadScene(
+                currentScene.buildIndex
+            );
+        }
+        else
+        {
+            /*
+             * Fallback for Editor testing if for some
+             * reason the scene does not have a valid
+             * Build Settings index.
+             */
+            SceneManager.LoadScene(
+                currentScene.name
+            );
+        }
     }
 }

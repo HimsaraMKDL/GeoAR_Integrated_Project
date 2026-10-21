@@ -851,6 +851,13 @@ public class C1UserGuidanceSystem : MonoBehaviour
             SetOnboardingIllustration(guideIndex, true);
             guideLeftButton.gameObject.SetActive(true);
             guideLeftButtonText.text = "SKIP";
+
+            // V11: restore the normal right-side position for the onboarding
+            // NEXT / LET'S START button. Shape Quick Help temporarily centres
+            // this same button, so each mode explicitly owns its layout.
+            SetRect(guideRightButton.GetComponent<RectTransform>(),
+                new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(-240f, 82f), new Vector2(320f, 96f));
             guideRightButtonText.text = guideIndex == onboardingTitles.Length - 1 ? "LET'S START" : "NEXT";
             return;
         }
@@ -867,6 +874,12 @@ public class C1UserGuidanceSystem : MonoBehaviour
                 new Vector2(0f, -20f), new Vector2(720f, 340f));
             guidePageText.text = "Tap HELP anytime to view this again";
             guideLeftButton.gameObject.SetActive(false);
+
+            // V11: centre the single GOT IT button on every shape Quick Help
+            // card so the action is visually balanced for primary learners.
+            SetRect(guideRightButton.GetComponent<RectTransform>(),
+                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(0f, 82f), new Vector2(320f, 96f));
             guideRightButtonText.text = "GOT IT";
         }
     }

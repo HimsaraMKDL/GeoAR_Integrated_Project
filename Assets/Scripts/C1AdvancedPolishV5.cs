@@ -1370,29 +1370,18 @@ public class C1AdvancedPolishV5 : MonoBehaviour
         celebrationBody = CreateText("Body", celebrationRoot.transform, 27, TextAnchor.MiddleCenter, new Color(0.20f, 0.29f, 0.42f, 1f));
         SetRect(celebrationBody.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 92f), new Vector2(680f, 130f));
 
-        // Small decorative dots; simple Images avoid external assets and keep
-        // the patch safe for the integrated project.
-        Vector2[] dotPositions =
-        {
-            new Vector2(-330f, 105f), new Vector2(330f, 100f), new Vector2(-350f, -85f),
-            new Vector2(350f, -78f), new Vector2(-265f, 138f), new Vector2(272f, 142f)
-        };
-        for (int i = 0; i < dotPositions.Length; i++)
-        {
-            GameObject dot = CreatePanel("Spark" + i, celebrationRoot.transform,
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), dotPositions[i], new Vector2(18f + (i % 2) * 8f, 18f + (i % 2) * 8f),
-                i % 2 == 0 ? new Color(0.24f, 0.63f, 1f, 0.95f) : new Color(0.68f, 0.34f, 1f, 0.92f), circleSprite);
-            dot.GetComponent<Image>().raycastTarget = false;
-        }
+        // V11: keep the success card clean and distraction-free.
+        // The decorative spark/dot images used in earlier versions are
+        // intentionally omitted; the top accent and typography remain.
 
         celebrationRoot.SetActive(false);
     }
 
     private void BuildFactsUI(Transform parent)
     {
-        // V9: persistent wide learning card directly below the progress bar.
+        // V11: persistent wide learning card with a clear gap below the progress bar.
         factsRoot = CreatePanel("C1V5FactsCard", parent,
-            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -330f), new Vector2(760f, 130f),
+            new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -365f), new Vector2(760f, 130f),
             new Color(0.06f, 0.12f, 0.25f, 0.94f), roundedSprite);
         factsRoot.GetComponent<Image>().raycastTarget = false;
         AddShadow(factsRoot, new Color(0f, 0f, 0f, 0.22f), new Vector2(0f, -5f));
